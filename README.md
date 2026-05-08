@@ -12,7 +12,7 @@ clean := portcullis.Redact("Run this with token=ghp_1234567890abcdef1234567890ab
 // → "Run this with token=[REDACTED] please."
 
 portcullis.Contains("not a secret")                                   // false
-portcullis.Contains("token=ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD") // true
+portcullis.Contains("token=ghp_1234567890abcdef1234567890abcdef1234") // true
 ```
 
 ## Why
