@@ -119,14 +119,18 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"},
 		},
 		{
-			// stripe-publishable-token
-			expression: asSecretGroup(`?P<secret>(?i)pk_(test|live)_[0-9a-z]{10,32}`),
-			keywords:   []string{"pk_test_", "pk_live_"},
+			// stripe-publishable-token. Stripe added the `prod` env tag
+			// alongside `test` / `live` in 2024; widening the alternation
+			// keeps the keyword pre-filter cheap (one extra literal) and
+			// stops production-mode publishable keys from leaking through.
+			expression: asSecretGroup(`?P<secret>(?i)pk_(test|live|prod)_[0-9a-z]{10,32}`),
+			keywords:   []string{"pk_test_", "pk_live_", "pk_prod_"},
 		},
 		{
-			// stripe-secret-token
-			expression: asSecretGroup(`?P<secret>(?i)sk_(test|live)_[0-9a-z]{10,32}`),
-			keywords:   []string{"sk_test_", "sk_live_"},
+			// stripe-secret-token (see the publishable rule above for the
+			// `prod` extension rationale).
+			expression: asSecretGroup(`?P<secret>(?i)sk_(test|live|prod)_[0-9a-z]{10,32}`),
+			keywords:   []string{"sk_test_", "sk_live_", "sk_prod_"},
 		},
 		{
 			// pypi-upload-token
@@ -542,9 +546,12 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// anthropic-api-key. Claude keys follow
-			// `sk-ant-(api|sid)NN-<base64url>` and are ~108 chars long;
-			// the trailing "AA" is the standard base64 padding.
-			expression: `sk-ant-(api|sid)\d{2}-[A-Za-z0-9_-]{93}AA`,
+			// `sk-ant-(api|sid|admin)NN-<base64url>` and are ~108 chars
+			// long; the trailing "AA" is the standard base64 padding.
+			// `admin01` keys grant org-wide management access (key issuance,
+			// usage limits) so leakage is at least as serious as a regular
+			// `api01` key.
+			expression: `sk-ant-(api|sid|admin)\d{2}-[A-Za-z0-9_-]{93}AA`,
 			keywords:   []string{"sk-ant-"},
 		},
 		{
@@ -599,9 +606,10 @@ var rules = sync.OnceValue(func() []rule {
 			// alongside the publishable / secret keys) follow the same
 			// `<prefix>_<env>_<body>` shape as `pk_` / `sk_`. Leakage of
 			// a restricted key still grants the scoped Stripe permissions
-			// it was issued with, so it must be redacted.
-			expression: `(?i)rk_(test|live)_[0-9a-z]{10,32}`,
-			keywords:   []string{"rk_test_", "rk_live_"},
+			// it was issued with, so it must be redacted. The `prod` env
+			// tag was added in 2024 alongside the `test` / `live` modes.
+			expression: `(?i)rk_(test|live|prod)_[0-9a-z]{10,32}`,
+			keywords:   []string{"rk_test_", "rk_live_", "rk_prod_"},
 		},
 		{
 			// notion-integration-token. The `ntn_` prefix is the modern
@@ -999,6 +1007,293 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `aio_[A-Za-z0-9]{28}`,
 			keywords:   []string{"aio_"},
 		},
+
+		// --- Fifth batch of additions: extra credentials cross-checked
+		// against the canonical gitleaks default ruleset and the
+		// associated vendor docs. Each entry targets a vendor-prefixed
+		// shape that's specific enough to keep the keyword pre-filter
+		// cheap and the regex's false-positive rate low.
+
+		// GitLab token family. The platform issues a long list of
+		// short-prefixed tokens beyond `glpat-` / `glptt-` (the two
+		// already covered by the rules above): each one grants a
+		// distinct slice of project / runner / SCIM authority and is
+		// emitted by `glab` / API responses without surrounding
+		// quotes. Bodies are bounded by GitLab's documented issuance
+		// shapes; using `[0-9a-zA-Z_-]` keeps the regex aligned with
+		// gitleaks and matches every body byte GitLab is known to
+		// emit.
+		{
+			// gitlab-cicd-job-token. `glcbt-` prefix; body is a short
+			// project identifier, an underscore, then a 20-char body.
+			expression: `glcbt-[0-9a-zA-Z]{1,5}_[0-9a-zA-Z_-]{20}`,
+			keywords:   []string{"glcbt-"},
+		},
+		{
+			// gitlab-deploy-token. `gldt-` prefix + 20-char body.
+			expression: `gldt-[0-9a-zA-Z_-]{20}`,
+			keywords:   []string{"gldt-"},
+		},
+		{
+			// gitlab-feature-flag-client-token. `glffct-` prefix.
+			expression: `glffct-[0-9a-zA-Z_-]{20}`,
+			keywords:   []string{"glffct-"},
+		},
+		{
+			// gitlab-feed-token. `glft-` prefix; user-scoped read access
+			// to the user's GitLab activity feeds.
+			expression: `glft-[0-9a-zA-Z_-]{20}`,
+			keywords:   []string{"glft-"},
+		},
+		{
+			// gitlab-kubernetes-agent-token. `glagent-` prefix and a
+			// 50-char body — used by the `kas` agent to authenticate
+			// against a GitLab control plane.
+			expression: `glagent-[0-9a-zA-Z_-]{50}`,
+			keywords:   []string{"glagent-"},
+		},
+		{
+			// gitlab-oauth-app-secret. `gloas-` prefix and a 64-char
+			// body — leakage of an OAuth app secret lets attackers
+			// impersonate the application during the OAuth dance.
+			expression: `gloas-[0-9a-zA-Z_-]{64}`,
+			keywords:   []string{"gloas-"},
+		},
+		{
+			// gitlab-runner-registration-token. The `GR1348941` prefix
+			// (uppercase, fixed) is documented for runner registration
+			// tokens; the trailing 20-char body uses the same charset
+			// as the rest of the GitLab tokens.
+			expression: `GR1348941[0-9a-zA-Z_-]{20}`,
+			keywords:   []string{"GR1348941"},
+		},
+		{
+			// gitlab-runner-authentication-token. `glrt-` prefix; same
+			// 20-char body charset as the deploy / feed token shapes.
+			expression: `glrt-[0-9a-zA-Z_-]{20}`,
+			keywords:   []string{"glrt-"},
+		},
+		{
+			// gitlab-scim-token. `glsoat-` prefix; grants SCIM
+			// (user-provisioning) access at the group / instance level.
+			expression: `glsoat-[0-9a-zA-Z_-]{20}`,
+			keywords:   []string{"glsoat-"},
+		},
+		{
+			// gitlab-pat-routable. The 2024 routable PAT format extends
+			// the legacy `glpat-<20>` shape with a longer (27-300 char)
+			// body and an appended `.<2-char prefix><7-char hex>`
+			// checksum/routing suffix. The legacy `gitlab-pat` rule above
+			// only matches the first 20 chars of the body, leaving the
+			// rest visible — this rule covers the full routable token in
+			// one redaction.
+			expression: `glpat-[0-9a-zA-Z_-]{27,300}\.[0-9a-z]{9}`,
+			keywords:   []string{"glpat-"},
+		},
+
+		// LLM-provider key formats added since the previous batches.
+
+		{
+			// aws-bedrock-long-lived-api-key. The 2024 Bedrock
+			// programmatic-access keys carry the `ABSK` prefix followed
+			// by a 109-269 char base64 body (lengths vary with the
+			// embedded scope / metadata, plus optional `=` padding).
+			expression: `ABSK[A-Za-z0-9+/]{109,269}={0,2}`,
+			keywords:   []string{"ABSK"},
+		},
+		{
+			// aws-bedrock-short-lived-api-key. Short-lived Bedrock keys
+			// embed the literal `bedrock-api-key-` prefix followed by a
+			// fixed `YmVkcm9jay5hbWF6b25hd3MuY29t` segment (base64 of
+			// `bedrock.amazonaws.com`) and then the actual body. The
+			// distinctive base64 marker keeps the keyword filter
+			// extremely selective.
+			expression: `bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=_-]{20,400}`,
+			keywords:   []string{"bedrock-api-key-"},
+		},
+
+		// Cloud / PaaS credentials.
+
+		{
+			// heroku-api-key-v2. Heroku's 2024 token format superseded
+			// the legacy `[0-9A-F]{8}-…` UUID shape (which the existing
+			// `heroku-api-key` rule still matches when prefixed with
+			// the `heroku` keyword). The new tokens carry an `HRKU-AA`
+			// prefix + 58-char base64url body and are emitted bare by
+			// the Heroku CLI / API responses.
+			expression: `HRKU-AA[0-9a-zA-Z_-]{58}`,
+			keywords:   []string{"HRKU-AA"},
+		},
+		{
+			// azure-ad-client-secret. Azure AD / Entra ID v2 client
+			// secrets always embed a `<3 chars>dQ~` infix between the
+			// 3-char header and the 31-34 char body. The keyword `q~`
+			// stays selective enough on real-world text (the digit-Q-
+			// tilde sequence is rare outside this format) for the AC
+			// pre-filter to remain useful.
+			expression: `[A-Za-z0-9_~.]{3}\dQ~[A-Za-z0-9_~.-]{31,34}`,
+			keywords:   []string{"Q~"},
+		},
+		{
+			// openshift-user-token. OpenShift / OKD user OAuth tokens
+			// carry the literal `sha256~` prefix and a 43-char
+			// base64url body. Leakage grants full kubeconfig-equivalent
+			// access until the token expires.
+			expression: `sha256~[A-Za-z0-9_-]{43}`,
+			keywords:   []string{"sha256~"},
+		},
+		{
+			// planetscale-oauth-token. The third PlanetScale token shape
+			// (alongside `pscale_pw_` / `pscale_tkn_`) covers OAuth
+			// flow-issued tokens and includes dots / equals signs from
+			// base64url padding.
+			expression: `pscale_oauth_[A-Za-z0-9_=.-]{32,80}`,
+			keywords:   []string{"pscale_oauth_"},
+		},
+
+		// Observability tokens.
+
+		{
+			// grafana-cloud-api-token. The Grafana Cloud-issued tokens
+			// (distinct from the legacy `eyJrIjoi…` HTTP-API tokens)
+			// carry the `glc_` prefix and a 32-400 char base64 body
+			// with optional `=` padding.
+			expression: `glc_[A-Za-z0-9+/]{32,400}={0,3}`,
+			keywords:   []string{"glc_"},
+		},
+		{
+			// grafana-service-account-token. Service-account tokens use
+			// the `glsa_<32 alnum>_<8 hex CRC>` shape — the trailing
+			// 8-char hex CRC keeps the regex tight even though the body
+			// itself is purely alphanumeric.
+			expression: `glsa_[A-Za-z0-9]{32}_[A-Fa-f0-9]{8}`,
+			keywords:   []string{"glsa_"},
+		},
+		{
+			// new-relic-insert-key. Used by data-ingest paths (Events /
+			// Metric / Log APIs); distinct from the user-API (`NRAK-`)
+			// and browser (`NRJS-`) keys already covered. Body is 32
+			// hex characters with optional dashes (no fixed positions).
+			expression: `NRII-[a-zA-Z0-9-]{32}`,
+			keywords:   []string{"NRII-"},
+		},
+		{
+			// sentry-user-token. The personal user-token format uses
+			// the `sntryu_` prefix + 64-char lowercase hex body —
+			// distinct from the org-scoped `sntrys_eyJ…` tokens already
+			// covered.
+			expression: `sntryu_[a-f0-9]{64}`,
+			keywords:   []string{"sntryu_"},
+		},
+
+		// Communication / messaging webhooks.
+
+		{
+			// slack-app-token. App-level tokens (used for Slack's
+			// Socket Mode) follow `xapp-<digit>-<workspace>-<int>-<hex>`.
+			// The four-segment shape is distinct from the bot / user /
+			// rotating tokens already covered by the slack-access /
+			// slack-rotating rules.
+			expression: `xapp-\d-[A-Z0-9]{8,16}-\d{8,16}-[a-fA-F0-9]{32,128}`,
+			keywords:   []string{"xapp-"},
+		},
+		{
+			// microsoft-teams-incoming-webhook. The full URL is itself a
+			// bearer credential — anyone holding it can post arbitrary
+			// content to the channel. The fixed `webhook.office.com`
+			// host plus the strictly UUID-shaped path segments keep the
+			// regex specific.
+			expression: `https://[a-z0-9]+\.webhook\.office\.com/webhookb2/[a-z0-9]{8}-(?:[a-z0-9]{4}-){3}[a-z0-9]{12}@[a-z0-9]{8}-(?:[a-z0-9]{4}-){3}[a-z0-9]{12}/IncomingWebhook/[a-zA-Z0-9]{32}/[a-z0-9]{8}-(?:[a-z0-9]{4}-){3}[a-z0-9]{12}`,
+			keywords:   []string{"webhook.office.com"},
+		},
+
+		// CI / CD / DevOps platforms.
+
+		{
+			// jfrog-reference-token. Distinct from `AKCp` API keys —
+			// reference tokens carry the literal `cmVmd` base64-prefix
+			// (decoding to `refd`) followed by a 59-char alphanumeric
+			// body. Leakage grants the same scope as a referenced
+			// access token until the latter is revoked.
+			expression: `cmVmd[A-Za-z0-9]{59}`,
+			keywords:   []string{"cmVmd"},
+		},
+		{
+			// infracost-api-token. Cost-estimation API tokens carry the
+			// `ico-` prefix and a 32-char alphanumeric body.
+			expression: `ico-[A-Za-z0-9]{32}`,
+			keywords:   []string{"ico-"},
+		},
+		{
+			// prefect-api-token. Prefect Cloud user tokens carry the
+			// `pnu_` prefix and a 36-char alphanumeric body.
+			expression: `pnu_[A-Za-z0-9]{36}`,
+			keywords:   []string{"pnu_"},
+		},
+		{
+			// readme-api-token. Readme.com (docs hosting) tokens carry
+			// the `rdme_` prefix and a 70-char lowercase-alphanumeric
+			// body.
+			expression: `rdme_[a-z0-9]{70}`,
+			keywords:   []string{"rdme_"},
+		},
+		{
+			// maxmind-license-key. License keys for the GeoIP / GeoLite2
+			// download feeds always end with the literal `_mmk` suffix
+			// after a `<6 alnum>_<29 alnum>` body, which keeps the
+			// keyword anchor cheap.
+			expression: `[A-Za-z0-9]{6}_[A-Za-z0-9]{29}_mmk`,
+			keywords:   []string{"_mmk"},
+		},
+
+		// Vendor-specific cloud / data / dev tokens with distinctive prefixes.
+
+		{
+			// clickhouse-cloud-api-secret-key. ClickHouse Cloud secret
+			// keys are 42 chars total and start with the literal `4b1d`
+			// marker (a vendor-defined leading 4 bytes), followed by a
+			// 38-char alphanumeric body.
+			expression: `4b1d[A-Za-z0-9]{38}`,
+			keywords:   []string{"4b1d"},
+		},
+		{
+			// yandex-cloud-api-key. Service-account API keys carry the
+			// uppercase `AQVN` prefix + 35-38 char base64url body.
+			expression: `AQVN[A-Za-z0-9_-]{35,38}`,
+			keywords:   []string{"AQVN"},
+		},
+		{
+			// facebook-page-access-token. Distinct from the legacy
+			// contextual `facebook-token` rule above. Page access tokens
+			// carry the `EAAM` (live) or `EAAC` (Marketing API) prefix
+			// and a 100-400 char alphanumeric body. The 4th-letter
+			// disambiguates against Square's `EAAA` access-token rule.
+			expression: `EAA[MC][A-Za-z0-9]{100,400}`,
+			keywords:   []string{"EAAM", "EAAC"},
+		},
+		{
+			// sourcegraph-access-token. Sourcegraph (code-search) access
+			// tokens carry the `sgp_` prefix and either a 40-char hex
+			// body (legacy) or `<16-hex-or-`local`>_<40-hex>` (current).
+			// We match both shapes in a single rule.
+			expression: `sgp_(?:(?:[a-fA-F0-9]{16}|local)_)?[a-fA-F0-9]{40}`,
+			keywords:   []string{"sgp_"},
+		},
+		{
+			// defined-networking-api-token. The Defined Networking
+			// (Nebula control plane) tokens carry the `dnkey-` prefix
+			// followed by a `<26 alnum>-<52 alnum>` body.
+			expression: `dnkey-[A-Za-z0-9_=-]{26}-[A-Za-z0-9_=-]{52}`,
+			keywords:   []string{"dnkey-"},
+		},
+		{
+			// scalingo-api-token. Scalingo PaaS API tokens carry the
+			// region-anchored `tk-us-` prefix and a 48-char body. Other
+			// regions (`tk-eu-`, `tk-osc-…`) follow the same shape; we
+			// list every region prefix gitleaks documents.
+			expression: `tk-(?:us|eu|osc-fr1|osc-secnum-fr1)-[A-Za-z0-9_-]{48}`,
+			keywords:   []string{"tk-us-", "tk-eu-", "tk-osc-"},
+		},
 	}
 })
 
@@ -1006,7 +1301,7 @@ var rules = sync.OnceValue(func() []rule {
 // folded into a [kwMask] over the catalogue's shared keyword index,
 // and its regex is compiled lazily on first match. A clean input —
 // the overwhelmingly common case — therefore never pays for
-// compiling any of the ~140 expressions in the catalogue, only for
+// compiling any of the ~175 expressions in the catalogue, only for
 // the keyword bitset and the AC table.
 type compiledRule struct {
 	kwBits  kwMask

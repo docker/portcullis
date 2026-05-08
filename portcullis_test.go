@@ -102,6 +102,61 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"honeycomb_config_key", "hcaic_" + strings.Repeat("a", 58)},
 		{"akamai_edgegrid_client_token", "akab-" + strings.Repeat("a", 16) + "-" + strings.Repeat("b", 16)},
 		{"adafruit_io_key", "aio_" + strings.Repeat("a", 28)},
+		// Fifth batch — GitLab token family beyond glpat- / glptt-,
+		// modern AWS Bedrock keys, Heroku v2, Azure AD, OpenShift,
+		// Grafana / New Relic / Sentry / Slack / Teams / JFrog refs,
+		// and a few PaaS / data tokens.
+		{"gitlab_cicd_job_token", "glcbt-" + "abc" + "_" + strings.Repeat("a", 20)},
+		{"gitlab_deploy_token", "gldt-" + strings.Repeat("a", 20)},
+		{"gitlab_feature_flag_client_token", "glffct-" + strings.Repeat("a", 20)},
+		{"gitlab_feed_token", "glft-" + strings.Repeat("a", 20)},
+		{"gitlab_kubernetes_agent_token", "glagent-" + strings.Repeat("a", 50)},
+		{"gitlab_oauth_app_secret", "gloas-" + strings.Repeat("a", 64)},
+		{"gitlab_runner_registration_token", "GR1348941" + strings.Repeat("a", 20)},
+		{"gitlab_runner_authentication_token", "glrt-" + strings.Repeat("a", 20)},
+		{"gitlab_scim_token", "glsoat-" + strings.Repeat("a", 20)},
+		{"gitlab_pat_routable", "glpat-" + strings.Repeat("a", 50) + ".aa1234567"},
+		{"aws_bedrock_long_lived_key", "ABSK" + strings.Repeat("a", 200)},
+		{"aws_bedrock_short_lived_key", "bedrock-api-key-" + "YmVkcm9jay5hbWF6b25hd3MuY29t" + strings.Repeat("a", 60)},
+		{"heroku_api_key_v2", "HRKU-AA" + strings.Repeat("a", 58)},
+		{"azure_ad_client_secret", "abc" + "1Q~" + strings.Repeat("a", 33)},
+		{"openshift_user_token", "sha256~" + strings.Repeat("a", 43)},
+		{"planetscale_oauth_token", "pscale_oauth_" + strings.Repeat("a", 40)},
+		{"grafana_cloud_api_token", "glc_" + strings.Repeat("a", 60)},
+		{"grafana_service_account_token", "glsa_" + strings.Repeat("a", 32) + "_" + strings.Repeat("f", 8)},
+		{"new_relic_insert_key", "NRII-" + strings.Repeat("a", 32)},
+		{"sentry_user_token", "sntryu_" + strings.Repeat("a", 64)},
+		{"slack_app_level_token", "xapp-1-A" + strings.Repeat("B", 10) + "-" + strings.Repeat("1", 12) + "-" + strings.Repeat("a", 64)},
+		{
+			"microsoft_teams_webhook",
+			"https://example.webhook.office.com/webhookb2/" +
+				strings.Repeat("a", 8) + "-" + strings.Repeat("b", 4) + "-" + strings.Repeat("c", 4) + "-" + strings.Repeat("d", 4) + "-" + strings.Repeat("e", 12) +
+				"@" +
+				strings.Repeat("a", 8) + "-" + strings.Repeat("b", 4) + "-" + strings.Repeat("c", 4) + "-" + strings.Repeat("d", 4) + "-" + strings.Repeat("e", 12) +
+				"/IncomingWebhook/" + strings.Repeat("a", 32) + "/" +
+				strings.Repeat("a", 8) + "-" + strings.Repeat("b", 4) + "-" + strings.Repeat("c", 4) + "-" + strings.Repeat("d", 4) + "-" + strings.Repeat("e", 12),
+		},
+		{"jfrog_reference_token", "cmVmd" + strings.Repeat("a", 59)},
+		{"infracost_api_token", "ico-" + strings.Repeat("a", 32)},
+		{"prefect_api_token", "pnu_" + strings.Repeat("a", 36)},
+		{"readme_api_token", "rdme_" + strings.Repeat("a", 70)},
+		{"maxmind_license_key", strings.Repeat("a", 6) + "_" + strings.Repeat("b", 29) + "_mmk"},
+		{"clickhouse_cloud_secret_key", "4b1d" + strings.Repeat("a", 38)},
+		{"yandex_cloud_api_key", "AQVN" + strings.Repeat("a", 36)},
+		{"facebook_page_access_token_marketing", "EAAM" + strings.Repeat("a", 200)},
+		{"facebook_page_access_token_live", "EAAC" + strings.Repeat("a", 200)},
+		{"sourcegraph_legacy", "sgp_" + strings.Repeat("a", 40)},
+		{"sourcegraph_modern", "sgp_" + strings.Repeat("a", 16) + "_" + strings.Repeat("b", 40)},
+		{"sourcegraph_local", "sgp_local_" + strings.Repeat("b", 40)},
+		{"defined_networking_token", "dnkey-" + strings.Repeat("a", 26) + "-" + strings.Repeat("b", 52)},
+		{"scalingo_api_token_us", "tk-us-" + strings.Repeat("a", 48)},
+		{"scalingo_api_token_eu", "tk-eu-" + strings.Repeat("a", 48)},
+		// Stripe `prod` env tag (added in 2024) for pk_, sk_ and rk_.
+		{"stripe_publishable_prod", "pk_prod_" + strings.Repeat("a", 24)},
+		{"stripe_secret_prod", "sk_prod_" + strings.Repeat("a", 24)},
+		{"stripe_restricted_prod", "rk_prod_" + strings.Repeat("a", 24)},
+		// Anthropic admin keys.
+		{"anthropic_admin_key", "sk-ant-" + "admin01-" + strings.Repeat("X", 93) + "AA"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
