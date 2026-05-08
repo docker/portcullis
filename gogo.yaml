@@ -1,0 +1,40 @@
+version: "1"
+
+sources:
+  lint: [go, .golangci.yml]
+
+tasks:
+  # Default: lint + test (the cycle every PR must pass).
+  default:
+    deps: [lint, test]
+
+  # Run unit tests, examples, and the linear-scaling guard.
+  test:
+    cmd: go test ./...
+    sources: go
+
+  # Run unit tests with the race detector.
+  test-race:
+    cmd: go test -race ./...
+    sources: go
+
+  # Run benchmarks (no tests, allocs reported).
+  bench:
+    cmd: go test -bench=. -benchmem -run=^$ ./...
+    sources: go
+
+  # Run linters.
+  lint:
+    cmds:
+      - golangci-lint run
+      - go mod tidy --diff >/dev/null || (echo 'go.mod/go.sum files are not tidy' && exit 1)
+    sources: lint
+
+  # Format Go source files.
+  format:
+    cmd: golangci-lint fmt
+    sources: go
+
+  # Tidy module dependencies.
+  tidy:
+    cmd: go mod tidy
