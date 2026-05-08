@@ -1,0 +1,108 @@
+version: "2"
+run:
+  tests: true
+linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - copyloopvar
+    - depguard
+    - dogsled
+    - durationcheck
+    - errcheck
+    - errname
+    - errorlint
+    - exptostd
+    - fatcontext
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gocritic
+    - gomoddirectives
+    - goprintffuncname
+    - govet
+    - inamedparam
+    - ineffassign
+    - intrange
+    - iotamixing
+    - misspell
+    - mirror
+    - modernize
+    - nakedret
+    - nolintlint
+    - perfsprint
+    - predeclared
+    - reassign
+    - revive
+    - staticcheck
+    - testableexamples
+    - testifylint
+    - thelper
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - usetesting
+    - whitespace
+    - wastedassign
+  settings:
+    depguard:
+      rules:
+        # The library targets the standard library + go's own regexp
+        # engine. Keep the runtime free of external dependencies so
+        # consumers don't inherit transitive risk; testify is allowed
+        # in tests only.
+        runtime_is_dependency_free:
+          files:
+            - "**/*.go"
+            - "!**/*_test.go"
+            - "!**/example_*.go"
+          deny:
+            - pkg: github.com/stretchr/testify
+              desc: testify is for tests only
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - hugeParam
+        - rangeValCopy
+        - unnamedResult
+        - appendAssign
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+        - name: package-comments
+          disabled: false
+    staticcheck:
+      checks:
+        - all
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+issues:
+  max-same-issues: 3
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      custom-order: true
+      sections:
+        - standard
+        - default
+        - prefix(github.com/docker/portcullis)
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+    gofumpt:
+      extra-rules: true

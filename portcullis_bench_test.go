@@ -1,0 +1,62 @@
+package portcullis_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/docker/portcullis"
+)
+
+// BenchmarkRedactCleanInput is the headline scenario: most messages
+// contain no secrets, so the keyword pre-filter must skip every rule's
+// regex.
+func BenchmarkRedactCleanInput(b *testing.B) {
+	text := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = portcullis.Redact(text)
+	}
+}
+
+// BenchmarkRedactWithSecret exercises the full path: lower-case +
+// keyword hit + regex match + cursor-rebuild redaction.
+func BenchmarkRedactWithSecret(b *testing.B) {
+	text := strings.Repeat("noise ", 100) +
+		"ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD" +
+		strings.Repeat(" trailing", 100)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = portcullis.Redact(text)
+	}
+}
+
+// BenchmarkContainsCleanInput pins the Contains hot path on inputs
+// that don't trip the pre-filter — the second-most-common scenario
+// after Redact on clean text. Contains short-circuits on the first
+// matching rule, so a clean payload exercises the same AC scan as
+// Redact without the regex follow-ups.
+func BenchmarkContainsCleanInput(b *testing.B) {
+	text := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = portcullis.Contains(text)
+	}
+}
+
+// BenchmarkContainsWithSecret measures the typical "is there a leak?"
+// gate path: AC pre-filter hits, the matching rule's regex confirms,
+// and Contains returns true on the first hit without scanning the
+// rest of the catalogue.
+func BenchmarkContainsWithSecret(b *testing.B) {
+	text := strings.Repeat("noise ", 100) +
+		"ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD" +
+		strings.Repeat(" trailing", 100)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = portcullis.Contains(text)
+	}
+}
