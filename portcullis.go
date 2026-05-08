@@ -73,28 +73,38 @@ func Redact(text string) string {
 // rest of the match intact.
 func redactWithRule(r *compiledRule, text string) string {
 	re, secretIdx := r.compile()
-	matches := re.FindAllStringSubmatchIndex(text, -1)
-	if len(matches) == 0 {
+
+	// Probe for the first match before reaching for FindAll: that
+	// avoids allocating the outer [][]int wrapper when there is at
+	// most one hit (the overwhelmingly common case in real inputs).
+	m := re.FindStringSubmatchIndex(text)
+	if m == nil {
 		return text
 	}
+	start, end := redactSpan(m, secretIdx)
 
-	// Fast path for the overwhelmingly common single-match case: a
-	// 3-way string concat allocates exactly the result buffer once,
-	// where strings.Builder pays for an over-sized scratch buffer plus
-	// the final string header (an extra alloc per Redact call).
-	if len(matches) == 1 {
-		start, end := redactSpan(matches[0], secretIdx)
+	// Fast path: a single match collapses to a 3-way string concat
+	// that allocates exactly the result buffer once. Probe the
+	// remainder for a second match before committing to it.
+	rest := re.FindStringSubmatchIndex(text[end:])
+	if rest == nil {
 		return text[:start] + Marker + text[end:]
 	}
 
+	// Multi-match path: walk the rest of the input one match at a
+	// time, copying the in-between spans into a Builder.
 	var b strings.Builder
 	b.Grow(len(text))
-	cursor := 0
-	for _, m := range matches {
-		start, end := redactSpan(m, secretIdx)
-		b.WriteString(text[cursor:start])
+	b.WriteString(text[:start])
+	b.WriteString(Marker)
+	cursor := end
+	for m := rest; m != nil; m = re.FindStringSubmatchIndex(text[cursor:]) {
+		s, e := redactSpan(m, secretIdx)
+		s += cursor
+		e += cursor
+		b.WriteString(text[cursor:s])
 		b.WriteString(Marker)
-		cursor = end
+		cursor = e
 	}
 	b.WriteString(text[cursor:])
 	return b.String()
