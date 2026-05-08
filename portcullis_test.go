@@ -160,6 +160,26 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		// 1Password user-side Secret Key (both documented body shapes).
 		{"onepassword_secret_key_long", "A3-ABCDEF-GHIJKLMNOPQ-12345-67890-ZYXWV"},
 		{"onepassword_secret_key_split", "A3-ABCDEF-GHIJKL-MNOPQ-12345-67890-ZYXWV"},
+		// Sixth batch — vendor-anchored contextual rules. Tokens
+		// here have no unique prefix; detection requires the vendor
+		// word to appear within ~50 chars of an assignment operator.
+		{"datadog_contextual", "DATADOG_API_KEY = " + strings.Repeat("a", 40)},
+		{"snyk_contextual", `SNYK_TOKEN = "` + "12345678-1234-1234-1234-123456789012" + `"`},
+		{"launchdarkly_contextual", `launchdarkly_sdk_key: "` + strings.Repeat("a", 40) + `"`},
+		{"cloudflare_api_key_contextual", `cloudflare_api_key=` + strings.Repeat("a", 40)},
+		{"cloudflare_global_api_key_contextual", `CLOUDFLARE_GLOBAL_KEY=` + strings.Repeat("f", 37)},
+		{"confluent_access_token_contextual", `CONFLUENT_API_KEY=` + strings.Repeat("a", 16)},
+		{"confluent_secret_key_contextual", `CONFLUENT_SECRET=` + strings.Repeat("a", 64)},
+		{"looker_client_id_contextual", `looker_client_id=` + strings.Repeat("a", 20)},
+		{"looker_client_secret_contextual", `looker_client_secret=` + strings.Repeat("a", 24)},
+		{"mattermost_contextual", `mattermost_token=` + strings.Repeat("a", 26)},
+		{"sumologic_contextual", `SUMO_ACCESS_KEY=` + strings.Repeat("a", 64)},
+		{"travisci_contextual", `TRAVIS_TOKEN=` + strings.Repeat("a", 22)},
+		{"zendesk_contextual", `zendesk_secret=` + strings.Repeat("a", 40)},
+		{"codecov_contextual", `CODECOV_TOKEN=` + strings.Repeat("a", 32)},
+		{"algolia_contextual", `algolia_admin_key=` + strings.Repeat("a", 32)},
+		{"airtable_contextual", `airtable_api_key=` + strings.Repeat("a", 17)},
+		{"sendbird_contextual", `sendbird_token=` + strings.Repeat("a", 40)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

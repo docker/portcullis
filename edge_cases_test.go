@@ -36,6 +36,18 @@ func TestNoisyKeywordsFalsePositives(t *testing.T) {
 		// v1.0- keyword - should NOT match version strings without the full pattern
 		{"version_string", "v1.0-beta"},
 		{"version_release", "v1.0-rc1"},
+
+		// Vendor names mentioned in prose without an assignment must
+		// not trigger the contextual rules added in the sixth batch.
+		// Each rule's regex requires `<vendor>...=...<value>` shape;
+		// a bare mention should slip through the keyword filter and
+		// the regex without matching.
+		{"datadog_in_prose", "We monitor the cluster with Datadog dashboards."},
+		{"snyk_in_prose", "Snyk found three high-severity issues this week."},
+		{"cloudflare_in_prose", "Cloudflare DDOS protection is enabled."},
+		{"travis_in_prose", "Travis CI is now archived; we moved to GitHub Actions."},
+		{"sumo_in_prose", "sumo wrestling is a Japanese sport."},
+		{"airtable_in_prose", "Airtable bases are like spreadsheets."},
 	}
 
 	for _, tc := range cases {
