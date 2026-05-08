@@ -22,6 +22,14 @@ func (m *kwMask) set(idx int) { m[idx>>6] |= 1 << uint(idx&63) }
 // removing the per-byte read of a separate hasMatch bitmap.
 const acceptBit uint32 = 1 << 31
 
+// stateShift converts between a state index and its row offset in
+// [acAutomaton.next]. Cells store the destination state pre-multiplied
+// by 256 so the slow loop's index becomes a plain `off + byte`,
+// saving a shift on the data-dependency chain that feeds the next
+// load. The state itself is recovered (only on accept hits) via
+// `off >> stateShift`.
+const stateShift = 8
+
 // acAutomaton is an Aho–Corasick keyword pre-filter for [Redact] and
 // [Contains]. A single linear pass over the input yields a [kwMask]
 // of every keyword that occurs, after which each rule can decide
@@ -31,13 +39,16 @@ const acceptBit uint32 = 1 << 31
 // don't need to lower-case the input.
 type acAutomaton struct {
 	// next is the dense (state, byte) → state table laid out as
-	// next[state*256 + byte]. Each cell packs two things: the low
-	// 31 bits hold the destination state, and bit 31 ([acceptBit])
+	// next[state*256 + byte]. Each cell packs two things: bits
+	// 0..30 hold the destination's *row offset* (state << 8, ready
+	// to be added to the next input byte), and bit 31 ([acceptBit])
 	// is set when that destination has a non-empty [accept] entry.
-	// Storing it flat keeps every transition one indirection away
-	// from a register, and folding the accept flag into the same
-	// load turns the slow-loop's "do I need to OR matches?" test
-	// into a single AND on an already-loaded register.
+	// Storing the offset rather than the bare state lets the slow
+	// loop drop the `s*256` multiplication that used to sit on the
+	// load-to-load critical path; the state index is only needed to
+	// recover [accept] on the ~10% of bytes that hit an accepting
+	// transition, where one shift is amortised by the work that
+	// follows.
 	next []uint32
 	// accept[s] records which patterns match in state s, already
 	// merged with patterns reachable via fail links so the scan loop
@@ -88,7 +99,7 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 
 	accept[0] = trie[0].terms
 	for c, child := range trie[0].children {
-		next[c] = child
+		next[c] = child << stateShift
 	}
 
 	queue := make([]uint32, 0, n)
@@ -104,13 +115,13 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 		accept[s][2] |= accept[fs][2]
 		accept[s][3] |= accept[fs][3]
 
-		base, fbase := s*256, fs*256
+		base, fbase := s<<stateShift, fs<<stateShift
 		copy(next[base:base+256], next[fbase:fbase+256])
 		for c, u := range trie[s].children {
-			// fail[u] is "what fs would do on c", which we read
-			// before overwriting the slot for our own child.
-			fail[u] = next[fbase+uint32(c)]
-			next[base+uint32(c)] = u
+			// fail[u] is "what fs would do on c". next[] holds row
+			// offsets, so shift back to a state index for fail[].
+			fail[u] = next[fbase+uint32(c)] >> stateShift
+			next[base+uint32(c)] = u << stateShift
 			queue = append(queue, u)
 		}
 	}
@@ -137,9 +148,9 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 	// empty accept by construction, so cells holding 0 ("stay at
 	// root") never get the bit set — preserving the fast loop's
 	// next[byte] == 0 check.
-	for i, target := range next {
-		if !accept[target].empty() {
-			next[i] = target | acceptBit
+	for i, off := range next {
+		if !accept[off>>stateShift].empty() {
+			next[i] = off | acceptBit
 		}
 	}
 
@@ -181,21 +192,21 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 		// memory load is needed on the ~90% of bytes whose
 		// destination has nothing to contribute.
 		raw := next[text[i]]
-		s := raw &^ acceptBit
+		off := raw &^ acceptBit
 		i++
 		if raw&acceptBit != 0 {
-			ap := &accept[s]
+			ap := &accept[off>>stateShift]
 			mask[0] |= ap[0]
 			mask[1] |= ap[1]
 			mask[2] |= ap[2]
 			mask[3] |= ap[3]
 		}
-		for i < n && s != 0 {
-			raw = next[s*256+uint32(text[i])]
-			s = raw &^ acceptBit
+		for i < n && off != 0 {
+			raw = next[off+uint32(text[i])]
+			off = raw &^ acceptBit
 			i++
 			if raw&acceptBit != 0 {
-				ap := &accept[s]
+				ap := &accept[off>>stateShift]
 				mask[0] |= ap[0]
 				mask[1] |= ap[1]
 				mask[2] |= ap[2]
