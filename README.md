@@ -8,7 +8,7 @@ credentials, and other secret material in arbitrary text.
 ```go
 import "github.com/docker/portcullis"
 
-clean := portcullis.Redact("Run this with token=ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD please.")
+clean := portcullis.Redact("Run this with token=ghp_1234567890abcdef1234567890abcdef1234 please.")
 // → "Run this with token=[REDACTED] please."
 
 portcullis.Contains("not a secret")                                   // false
