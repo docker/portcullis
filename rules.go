@@ -1008,6 +1008,20 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"aio_"},
 		},
 
+		{
+			// 1password-secret-key. The user-side "Secret Key" combined
+			// with the master password to derive the account-encryption
+			// key for 1Password vaults. Format is
+			// `A3-<6 alnum>-(<11 alnum>|<6 alnum>-<5 alnum>)-<5>-<5>-<5>`,
+			// all uppercase. Leakage of the Secret Key alone isn't
+			// sufficient to unlock a vault (the master password is
+			// still required), but it's part of a recovery pair that
+			// must remain confidential and is treated as a secret in
+			// every 1Password compliance regime.
+			expression: `A3-[A-Z0-9]{6}-(?:[A-Z0-9]{11}|[A-Z0-9]{6}-[A-Z0-9]{5})-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}`,
+			keywords:   []string{"A3-"},
+		},
+
 		// --- Fifth batch of additions: extra credentials cross-checked
 		// against the canonical gitleaks default ruleset and the
 		// associated vendor docs. Each entry targets a vendor-prefixed

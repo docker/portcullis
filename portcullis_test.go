@@ -157,6 +157,9 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"stripe_restricted_prod", "rk_prod_" + strings.Repeat("a", 24)},
 		// Anthropic admin keys.
 		{"anthropic_admin_key", "sk-ant-" + "admin01-" + strings.Repeat("X", 93) + "AA"},
+		// 1Password user-side Secret Key (both documented body shapes).
+		{"onepassword_secret_key_long", "A3-ABCDEF-GHIJKLMNOPQ-12345-67890-ZYXWV"},
+		{"onepassword_secret_key_split", "A3-ABCDEF-GHIJKL-MNOPQ-12345-67890-ZYXWV"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
