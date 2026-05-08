@@ -30,6 +30,16 @@ type acAutomaton struct {
 	// merged with patterns reachable via fail links so the scan loop
 	// never has to walk them.
 	accept []kwMask
+	// hasMatch is a compact bitmap of "states whose accept entry is
+	// non-empty". The vast majority of AC states are pass-through
+	// (no pattern terminates there and none reaches via fail
+	// links), so consulting this bitmap before doing the four
+	// 8-byte loads + ORs against [acAutomaton.accept] elides the
+	// work for ~90% of slow-loop bytes. The bitmap is one bit per
+	// state (~145 bytes for today's catalogue) so it stays
+	// resident in L1 even when the (much larger) accept[] table
+	// would spill to L2.
+	hasMatch []uint64
 }
 
 // buildAhoCorasick compiles patterns into an automaton. Patterns
@@ -114,7 +124,21 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 		}
 	}
 
-	return &acAutomaton{next: next, accept: accept}
+	// Stage 4: compact "has match" bitmap. Loading [kwMask] (32
+	// bytes) into the OR pipeline on every slow-loop byte is the
+	// single most expensive thing the scan does on real-world
+	// inputs (cf. pprof line attribution); gating that load behind
+	// a 1-bit check against this bitmap is a near-pure win because
+	// the bitmap is two orders of magnitude smaller than
+	// [acAutomaton.accept] and stays in L1.
+	hasMatch := make([]uint64, (n+63)/64)
+	for s := range n {
+		if !accept[s].empty() {
+			hasMatch[s>>6] |= 1 << uint(s&63)
+		}
+	}
+
+	return &acAutomaton{next: next, accept: accept, hasMatch: hasMatch}
 }
 
 // scan returns a kwMask of every pattern that occurs at least once
@@ -125,7 +149,7 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 	// Hoist slice headers into locals so the compiler can prove the
 	// (state, byte) index is in range once at function entry rather
 	// than re-checking inside the hot loop.
-	next, accept := a.next, a.accept
+	next, accept, hasMatch := a.next, a.accept, a.hasMatch
 	n := len(text)
 	i := 0
 	for i < n {
@@ -145,21 +169,32 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 		// Slow loop: we just entered a non-root state, so accumulate
 		// matches until the automaton drops back to the root. Then
 		// the outer loop hands control back to the fast scan.
+		//
+		// The OR-into-mask path is gated behind the [hasMatch]
+		// bitmap: most non-root states are pass-through (no pattern
+		// terminates there or reaches via fail), so loading the
+		// 32-byte accept entry would just OR zeroes into the mask.
+		// Skipping that load on the ~90% of bytes where it's empty
+		// is the dominant slow-loop optimisation.
 		s := next[text[i]]
 		i++
-		ap := &accept[s]
-		mask[0] |= ap[0]
-		mask[1] |= ap[1]
-		mask[2] |= ap[2]
-		mask[3] |= ap[3]
-		for i < n && s != 0 {
-			s = next[int(s)*256+int(text[i])]
-			i++
-			ap = &accept[s]
+		if hasMatch[s>>6]>>uint(s&63)&1 != 0 {
+			ap := &accept[s]
 			mask[0] |= ap[0]
 			mask[1] |= ap[1]
 			mask[2] |= ap[2]
 			mask[3] |= ap[3]
+		}
+		for i < n && s != 0 {
+			s = next[int(s)*256+int(text[i])]
+			i++
+			if hasMatch[s>>6]>>uint(s&63)&1 != 0 {
+				ap := &accept[s]
+				mask[0] |= ap[0]
+				mask[1] |= ap[1]
+				mask[2] |= ap[2]
+				mask[3] |= ap[3]
+			}
 		}
 	}
 	return mask
