@@ -14,6 +14,14 @@ func (m *kwMask) overlaps(other kwMask) bool {
 }
 func (m *kwMask) set(idx int) { m[idx>>6] |= 1 << uint(idx&63) }
 
+// acceptBit is set in a [acAutomaton.next] cell when the destination
+// state has at least one accepting pattern (directly or via fail
+// links). Folding the flag into the same word as the transition
+// turns the "did we just enter an accepting state?" test into a
+// register-only AND on a value the scan loop has already loaded,
+// removing the per-byte read of a separate hasMatch bitmap.
+const acceptBit uint32 = 1 << 31
+
 // acAutomaton is an Aho–Corasick keyword pre-filter for [Redact] and
 // [Contains]. A single linear pass over the input yields a [kwMask]
 // of every keyword that occurs, after which each rule can decide
@@ -23,23 +31,20 @@ func (m *kwMask) set(idx int) { m[idx>>6] |= 1 << uint(idx&63) }
 // don't need to lower-case the input.
 type acAutomaton struct {
 	// next is the dense (state, byte) → state table laid out as
-	// next[state*256 + byte]. Storing it flat keeps every transition
-	// one indirection away from a register.
-	next []int32
+	// next[state*256 + byte]. Each cell packs two things: the low
+	// 31 bits hold the destination state, and bit 31 ([acceptBit])
+	// is set when that destination has a non-empty [accept] entry.
+	// Storing it flat keeps every transition one indirection away
+	// from a register, and folding the accept flag into the same
+	// load turns the slow-loop's "do I need to OR matches?" test
+	// into a single AND on an already-loaded register.
+	next []uint32
 	// accept[s] records which patterns match in state s, already
 	// merged with patterns reachable via fail links so the scan loop
-	// never has to walk them.
+	// never has to walk them. The slow loop only touches this slice
+	// for the ~10% of bytes whose transition has [acceptBit] set,
+	// so on real-world inputs accept[] effectively stays cold.
 	accept []kwMask
-	// hasMatch is a compact bitmap of "states whose accept entry is
-	// non-empty". The vast majority of AC states are pass-through
-	// (no pattern terminates there and none reaches via fail
-	// links), so consulting this bitmap before doing the four
-	// 8-byte loads + ORs against [acAutomaton.accept] elides the
-	// work for ~90% of slow-loop bytes. The bitmap is one bit per
-	// state (~145 bytes for today's catalogue) so it stays
-	// resident in L1 even when the (much larger) accept[] table
-	// would spill to L2.
-	hasMatch []uint64
 }
 
 // buildAhoCorasick compiles patterns into an automaton. Patterns
@@ -52,18 +57,18 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 	// Stage 1: build the trie sparsely. Each node knows its children
 	// and which patterns terminate there.
 	type tnode struct {
-		children map[byte]int32
+		children map[byte]uint32
 		terms    kwMask
 	}
-	trie := []*tnode{{children: map[byte]int32{}}}
+	trie := []*tnode{{children: map[byte]uint32{}}}
 	for idx, p := range patterns {
-		cur := int32(0)
+		cur := uint32(0)
 		for i := range len(p) {
 			c := p[i]
 			child, ok := trie[cur].children[c]
 			if !ok {
-				child = int32(len(trie))
-				trie = append(trie, &tnode{children: map[byte]int32{}})
+				child = uint32(len(trie))
+				trie = append(trie, &tnode{children: map[byte]uint32{}})
 				trie[cur].children[c] = child
 			}
 			cur = child
@@ -77,16 +82,16 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 	// inherit its transitions wholesale and then overwrite the slots
 	// for which the current state has its own children.
 	n := len(trie)
-	next := make([]int32, n*256)
+	next := make([]uint32, n*256)
 	accept := make([]kwMask, n)
-	fail := make([]int32, n)
+	fail := make([]uint32, n)
 
 	accept[0] = trie[0].terms
 	for c, child := range trie[0].children {
 		next[c] = child
 	}
 
-	queue := make([]int32, 0, n)
+	queue := make([]uint32, 0, n)
 	for _, child := range trie[0].children {
 		queue = append(queue, child) // fail[child] = 0 (root) by zero-init
 	}
@@ -99,13 +104,13 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 		accept[s][2] |= accept[fs][2]
 		accept[s][3] |= accept[fs][3]
 
-		base, fbase := int(s)*256, int(fs)*256
+		base, fbase := s*256, fs*256
 		copy(next[base:base+256], next[fbase:fbase+256])
 		for c, u := range trie[s].children {
 			// fail[u] is "what fs would do on c", which we read
 			// before overwriting the slot for our own child.
-			fail[u] = next[fbase+int(c)]
-			next[base+int(c)] = u
+			fail[u] = next[fbase+uint32(c)]
+			next[base+uint32(c)] = u
 			queue = append(queue, u)
 		}
 	}
@@ -124,21 +129,21 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 		}
 	}
 
-	// Stage 4: compact "has match" bitmap. Loading [kwMask] (32
-	// bytes) into the OR pipeline on every slow-loop byte is the
-	// single most expensive thing the scan does on real-world
-	// inputs (cf. pprof line attribution); gating that load behind
-	// a 1-bit check against this bitmap is a near-pure win because
-	// the bitmap is two orders of magnitude smaller than
-	// [acAutomaton.accept] and stays in L1.
-	hasMatch := make([]uint64, (n+63)/64)
-	for s := range n {
-		if !accept[s].empty() {
-			hasMatch[s>>6] |= 1 << uint(s&63)
+	// Stage 4: fold an "accept-here" bit into every transition cell
+	// whose destination state has a non-empty accept entry. The scan
+	// loop can then test for matches with a single AND on the value
+	// it has just loaded, instead of reading a separate hasMatch
+	// bitmap (the previous design). Note that root (state 0) has an
+	// empty accept by construction, so cells holding 0 ("stay at
+	// root") never get the bit set — preserving the fast loop's
+	// next[byte] == 0 check.
+	for i, target := range next {
+		if !accept[target].empty() {
+			next[i] = target | acceptBit
 		}
 	}
 
-	return &acAutomaton{next: next, accept: accept, hasMatch: hasMatch}
+	return &acAutomaton{next: next, accept: accept}
 }
 
 // scan returns a kwMask of every pattern that occurs at least once
@@ -149,16 +154,15 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 	// Hoist slice headers into locals so the compiler can prove the
 	// (state, byte) index is in range once at function entry rather
 	// than re-checking inside the hot loop.
-	next, accept, hasMatch := a.next, a.accept, a.hasMatch
+	next, accept := a.next, a.accept
 	n := len(text)
 	i := 0
 	for i < n {
 		// Fast loop: stay at root and skip bytes that can't begin
-		// any pattern. accept[0] is empty by construction (no
-		// pattern ends at root), so the OR ops would be no-ops here
-		// anyway. Skipping the read of accept[0] entirely keeps the
-		// inner loop down to one bounds-checked memory load and one
-		// branch per byte — close to memchr-grade throughput on the
+		// any pattern. Cells holding 0 encode "go to root, no
+		// accepts" (root has no accepts by construction), so neither
+		// the destination state nor the accept bit needs to be
+		// extracted here — close to memchr-grade throughput on the
 		// overwhelmingly common clean-input path.
 		for i < n && next[text[i]] == 0 {
 			i++
@@ -170,15 +174,16 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 		// matches until the automaton drops back to the root. Then
 		// the outer loop hands control back to the fast scan.
 		//
-		// The OR-into-mask path is gated behind the [hasMatch]
-		// bitmap: most non-root states are pass-through (no pattern
-		// terminates there or reaches via fail), so loading the
-		// 32-byte accept entry would just OR zeroes into the mask.
-		// Skipping that load on the ~90% of bytes where it's empty
-		// is the dominant slow-loop optimisation.
-		s := next[text[i]]
+		// Each transition cell carries an [acceptBit] in its high
+		// bit when the destination state has matches; the OR-into-
+		// mask path is gated behind that single AND on the same
+		// value we just loaded for the next-state lookup. No second
+		// memory load is needed on the ~90% of bytes whose
+		// destination has nothing to contribute.
+		raw := next[text[i]]
+		s := raw &^ acceptBit
 		i++
-		if hasMatch[s>>6]>>uint(s&63)&1 != 0 {
+		if raw&acceptBit != 0 {
 			ap := &accept[s]
 			mask[0] |= ap[0]
 			mask[1] |= ap[1]
@@ -186,9 +191,10 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 			mask[3] |= ap[3]
 		}
 		for i < n && s != 0 {
-			s = next[int(s)*256+int(text[i])]
+			raw = next[s*256+uint32(text[i])]
+			s = raw &^ acceptBit
 			i++
-			if hasMatch[s>>6]>>uint(s&63)&1 != 0 {
+			if raw&acceptBit != 0 {
 				ap := &accept[s]
 				mask[0] |= ap[0]
 				mask[1] |= ap[1]
