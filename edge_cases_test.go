@@ -48,6 +48,12 @@ func TestNoisyKeywordsFalsePositives(t *testing.T) {
 		{"travis_in_prose", "Travis CI is now archived; we moved to GitHub Actions."},
 		{"sumo_in_prose", "sumo wrestling is a Japanese sport."},
 		{"airtable_in_prose", "Airtable bases are like spreadsheets."},
+
+		// New seventh-batch keywords that could be noisy.
+		{"sdk_in_prose", "Install the android-sdk-tools package."},
+		{"mysql_without_password", "mysql://localhost:3306/mydb"},
+		{"redis_without_password", "redis://localhost:6379"},
+		{"amqp_without_password", "amqp://localhost:5672"},
 	}
 
 	for _, tc := range cases {
@@ -104,6 +110,30 @@ func TestConnectionStringContextPreservation(t *testing.T) {
 			input:       "DefaultEndpointsProtocol=https;AccountName=mystorage;AccountKey=" + strings.Repeat("a", 86) + "==",
 			mustHave:    []string{"DefaultEndpointsProtocol=https", "AccountName=mystorage", "AccountKey="},
 			mustNotHave: strings.Repeat("a", 86) + "==",
+		},
+		{
+			name:        "mysql_preserves_user_and_host",
+			input:       "mysql://appuser:secretpass789@db.example.com:3306/mydb",
+			mustHave:    []string{"mysql://", "appuser", "@db.example.com"},
+			mustNotHave: "secretpass789",
+		},
+		{
+			name:        "redis_preserves_user_and_host",
+			input:       "redis://default:redispass123@cache.example.com:6379/0",
+			mustHave:    []string{"redis://", "default", "@cache.example.com"},
+			mustNotHave: "redispass123",
+		},
+		{
+			name:        "redis_no_user_preserves_host",
+			input:       "redis://:redispass456@cache.example.com:6379",
+			mustHave:    []string{"redis://", "@cache.example.com"},
+			mustNotHave: "redispass456",
+		},
+		{
+			name:        "amqp_preserves_user_and_host",
+			input:       "amqp://guest:rabbitpass789@rabbit.example.com:5672/vhost",
+			mustHave:    []string{"amqp://", "guest", "@rabbit.example.com"},
+			mustNotHave: "rabbitpass789",
 		},
 	}
 

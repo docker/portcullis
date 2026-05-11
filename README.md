@@ -57,27 +57,28 @@ across goroutines.
 
 ## What it detects
 
-The built-in catalogue covers ~140 patterns spanning:
+The built-in catalogue covers ~200 patterns spanning:
 
 - Cloud providers — AWS, GCP service accounts, Azure Storage,
-  DigitalOcean, Tencent, Alibaba.
+  Azure DevOps, DigitalOcean, Tencent, Alibaba.
 - Source forges — GitHub (PAT / OAuth / app / fine-grained / refresh),
   GitLab, Bitbucket, Docker Hub (PAT / OAT), JFrog, Sonar.
 - LLM / AI providers — OpenAI, Anthropic, Google (AIza), xAI / Grok,
   Cohere, Groq, Perplexity, Replicate, OpenRouter, Hugging Face.
 - Payment processors — Stripe (publishable / secret / restricted /
-  webhook), Razorpay, Adyen, Plaid, Square.
+  webhook), Razorpay, Adyen, Plaid, Square, Braintree.
 - Communication & ops — Slack (legacy & rotating), Discord (bot &
   webhook), Telegram, Twilio, SendGrid, Mailgun, Mailchimp.
+- SaaS & developer tools — Figma, Contentful, HubSpot, LaunchDarkly,
+  Doppler, 1Password, Vercel, Netlify, Render, Fly.io.
 - Infra & tooling — HashiCorp Vault (service / batch / recovery),
-  Terraform Cloud, Tailscale, Doppler, 1Password service accounts,
-  Vercel, Netlify, Render, Fly.io, Cloudflare Origin CA, Akamai,
-  PlanetScale, Supabase, MongoDB / Postgres connection-string passwords,
-  PEM private keys, JWTs, and more.
+  Terraform Cloud, Tailscale, Cloudflare Origin CA, Akamai,
+  PlanetScale, Supabase, MongoDB / Postgres / MySQL / Redis / AMQP
+  connection-string passwords, PEM private keys, JWTs, and more.
 
-Connection-string rules (MongoDB, Postgres, Azure Storage) redact only
-the password / key span so log readers can still tell which host or
-account was being addressed.
+Connection-string rules (MongoDB, Postgres, MySQL, Redis, AMQP, Azure
+Storage) redact only the password / key span so log readers can still
+tell which host or account was being addressed.
 
 ## Development
 

@@ -180,6 +180,26 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"algolia_contextual", `algolia_admin_key=` + strings.Repeat("a", 32)},
 		{"airtable_contextual", `airtable_api_key=` + strings.Repeat("a", 17)},
 		{"sendbird_contextual", `sendbird_token=` + strings.Repeat("a", 40)},
+		// Seventh batch — patterns from gitleaks / trufflehog / detect-secrets.
+		{"figma_pat", "figd_" + strings.Repeat("a", 40)},
+		{"contentful_pat", "CFPAT-" + strings.Repeat("a", 43)},
+		{"doppler_service_token", "dp.st." + strings.Repeat("a", 43)},
+		{"doppler_cli_token", "dp.ct." + strings.Repeat("a", 43)},
+		{"doppler_scim_token", "dp.scim." + strings.Repeat("a", 43)},
+		{"doppler_audit_token", "dp.audit." + strings.Repeat("a", 43)},
+		{"doppler_service_account_token", "dp.sa." + strings.Repeat("a", 43)},
+		{"hubspot_private_app_token_na1", "pat-na1-" + "12345678-1234-1234-1234-123456789012"},
+		{"hubspot_private_app_token_eu1", "pat-eu1-" + "abcdef01-2345-6789-abcd-ef0123456789"},
+		{"launchdarkly_sdk_key", "sdk-" + "12345678-1234-1234-1234-123456789012"},
+		{"braintree_access_token_production", "access_token$production$" + strings.Repeat("a", 16) + "$" + strings.Repeat("f", 32)},
+		{"braintree_access_token_sandbox", "access_token$sandbox$" + strings.Repeat("b", 8) + "$" + strings.Repeat("e", 28)},
+		{"azure_devops_pat", "oy2" + strings.Repeat("A", 46)},
+		{"mysql_conn_string", "mysql://myuser:" + strings.Repeat("s", 24) + "@db.example.com"},
+		{"redis_conn_string", "redis://default:" + strings.Repeat("p", 24) + "@redis.example.com:6379"},
+		{"redis_conn_string_no_user", "redis://:" + strings.Repeat("p", 24) + "@redis.example.com:6379"},
+		{"rediss_conn_string", "rediss://user:" + strings.Repeat("p", 24) + "@redis.example.com:6380"},
+		{"amqp_conn_string", "amqp://guest:" + strings.Repeat("p", 24) + "@rabbit.example.com"},
+		{"amqps_conn_string", "amqps://user:" + strings.Repeat("p", 24) + "@rabbit.example.com:5671"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

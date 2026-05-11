@@ -1451,6 +1451,106 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`sendbird`, `[a-f0-9]{40}`),
 			keywords:   []string{"sendbird"},
 		},
+
+		// --- Seventh batch of additions: patterns identified by
+		// cross-referencing gitleaks, trufflehog, and detect-secrets
+		// rule catalogues for vendor-prefixed credentials not yet
+		// covered. Includes connection-string rules for popular
+		// databases / message brokers that follow the same
+		// password-only-redaction design as the existing MongoDB /
+		// Postgres / Azure Storage rules.
+
+		// Prefix-based rules.
+
+		{
+			// figma-personal-access-token. Figma REST-API personal
+			// access tokens carry the `figd_` prefix and a 22-100
+			// char alphanumeric body. Leakage grants full API access
+			// to files, projects, and team resources.
+			expression: `figd_[A-Za-z0-9_-]{22,100}`,
+			keywords:   []string{"figd_"},
+		},
+		{
+			// contentful-personal-access-token. The `CFPAT-` prefix
+			// is documented for Contentful personal access tokens;
+			// the body is 43 chars of base64url-ish content.
+			expression: `CFPAT-[A-Za-z0-9_-]{43}`,
+			keywords:   []string{"CFPAT-"},
+		},
+		{
+			// doppler-extra-tokens. Doppler issues five additional
+			// token types beyond the personal token (`dp.pt.`)
+			// already covered: service (`dp.st.`), CLI (`dp.ct.`),
+			// SCIM (`dp.scim.`), audit (`dp.audit.`), and service-
+			// account (`dp.sa.`) tokens. All share the same 43-char
+			// alphanumeric body.
+			expression: `dp\.(st|ct|scim|audit|sa)\.(?i)[a-z0-9]{43}`,
+			keywords:   []string{"dp.st.", "dp.ct.", "dp.scim.", "dp.audit.", "dp.sa."},
+		},
+		{
+			// hubspot-private-app-token. HubSpot's 2023 Private App
+			// Token format carries a data-center prefix (`na1` for
+			// North America, `eu1` for the EU) followed by a UUID
+			// body. The existing `hubspot-api-token` rule only fires
+			// with the `hubspot` keyword nearby; this rule catches
+			// bare tokens in CLI output / logs.
+			expression: `pat-(?:na1|eu1)-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`,
+			keywords:   []string{"pat-na1-", "pat-eu1-"},
+		},
+		{
+			// launchdarkly-sdk-key. LaunchDarkly SDK keys follow the
+			// `sdk-<UUID>` shape and are used to initialise server-
+			// side SDKs. Leakage exposes feature-flag evaluation
+			// logic and targeting rules. The existing contextual
+			// `launchdarkly` rule requires the vendor name nearby;
+			// this rule catches bare SDK keys.
+			expression: `sdk-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`,
+			keywords:   []string{"sdk-"},
+		},
+		{
+			// braintree-access-token. Braintree (PayPal) access
+			// tokens use `$`-delimited segments:
+			// `access_token$<env>$<merchant_id>$<token>`. The literal
+			// `$` makes the format highly distinctive.
+			expression: `access_token\$(?:production|sandbox)\$[a-z0-9]{1,128}\$[a-f0-9]{25,36}`,
+			keywords:   []string{"access_token$"},
+		},
+		{
+			// azure-devops-pat. Azure DevOps personal access tokens
+			// begin with the base64 bytes `oy2` followed by a 43-49
+			// char base64url body. The same PAT authenticates Azure
+			// DevOps REST APIs, NuGet feeds, and Azure Artifacts.
+			expression: `oy2[A-Za-z0-9+/]{43,49}={0,2}`,
+			keywords:   []string{"oy2"},
+		},
+
+		// Connection-string rules (password-only redaction).
+
+		{
+			// mysql-connection-string. Same design as the existing
+			// MongoDB / Postgres rules: only the URI password is
+			// redacted so the surrounding `mysql://user@host/db`
+			// framing stays readable.
+			expression: `mysql://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
+			keywords:   []string{"mysql://"},
+		},
+		{
+			// redis-connection-string. Redis URIs support both
+			// `redis://user:password@host` (ACL) and the older
+			// `redis://:password@host` (no username) forms. The
+			// TLS variant uses the `rediss://` scheme. Only the
+			// password span is redacted.
+			expression: `rediss?://[^\s:/?#@]*:(?P<secret>[^\s@]{1,200})@`,
+			keywords:   []string{"redis://", "rediss://"},
+		},
+		{
+			// amqp-connection-string. RabbitMQ and other AMQP
+			// brokers accept `amqp://user:password@host` URIs;
+			// the TLS variant uses `amqps://`. Only the password
+			// span is redacted.
+			expression: `amqps?://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
+			keywords:   []string{"amqp://", "amqps://"},
+		},
 	}
 })
 
