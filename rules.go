@@ -1533,6 +1533,13 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`assemblyai`, `[a-f0-9]{32}`),
 			keywords:   []string{"assemblyai"},
 		},
+		{
+			// deepgram-api-key. 40-char hex API key for the
+			// Deepgram speech-to-text platform. Source: trufflehog
+			// `deepgram` detector.
+			expression: contextual(`deepgram`, `[a-f0-9]{40}`),
+			keywords:   []string{"deepgram"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
