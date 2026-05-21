@@ -1555,6 +1555,18 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `amqps?://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
 			keywords:   []string{"amqp://", "amqps://"},
 		},
+
+		// --- Eighth batch: prefix-anchored vendor tokens cross-
+		// checked against the gitleaks default ruleset.
+
+		{
+			// harness-api-key. Both Personal Access Tokens (`pat.`)
+			// and Service Account Tokens (`sat.`) follow the same
+			// three-segment shape; full Harness account access if
+			// leaked. Source: gitleaks `harness-api-key` rule.
+			expression: `(?:pat|sat)\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9]{24}\.[A-Za-z0-9]{20}`,
+			keywords:   []string{"pat.", "sat."},
+		},
 	}
 })
 

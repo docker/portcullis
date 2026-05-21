@@ -204,6 +204,8 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		// against the gitleaks default ruleset.
 		{"aws_access_key_abia", "ABIA" + strings.Repeat("A", 16)},
 		{"aws_access_key_acca", "ACCA" + strings.Repeat("A", 16)},
+		{"harness_pat", "pat." + strings.Repeat("a", 22) + "." + strings.Repeat("b", 24) + "." + strings.Repeat("c", 20)},
+		{"harness_sat", "sat." + strings.Repeat("a", 22) + "." + strings.Repeat("b", 24) + "." + strings.Repeat("c", 20)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
