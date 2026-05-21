@@ -1497,6 +1497,15 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `\bpk_[0-9]{7,9}_[0-9A-Z]{32}\b`,
 			keywords:   []string{"pk_"},
 		},
+		{
+			// alchemy-api-key. Alchemy (web3 RPC provider) tokens
+			// carry the `alcht_` prefix and a 30-char alphanumeric
+			// body. Leakage exposes paid-tier RPC quota and
+			// historical-data endpoints. Source: trufflehog
+			// `alchemy` detector.
+			expression: `alcht_[0-9a-zA-Z]{30}`,
+			keywords:   []string{"alcht_"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
