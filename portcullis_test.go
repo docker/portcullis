@@ -223,6 +223,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"deepgram_api_key", "deepgram_token=" + strings.Repeat("a", 40)},
 		{"logzio_shipping_token", "logz_io_token=12345678-1234-1234-1234-1234567890ab"},
 		{"etherscan_api_key", "ETHERSCAN_API_KEY=" + strings.Repeat("A", 34)},
+		{"moralis_api_key", "moralis_api_key=" + strings.Repeat("a", 64)},
 		{"gitlab_incoming_mail_token", "glimt-" + strings.Repeat("a", 25)},
 		{"sidekiq_gems_url", "https://cafebabe:deadbeef@gems.contribsys.com/"},
 		{"sidekiq_enterprise_url", "http://cafeb4b3:d3adb33f@enterprise.contribsys.com/path"},

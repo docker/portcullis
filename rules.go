@@ -1557,6 +1557,14 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`etherscan`, `[0-9A-Z]{34}`),
 			keywords:   []string{"etherscan"},
 		},
+		{
+			// moralis-api-key. 64-char alphanumeric API key for the
+			// Moralis web3 backend; leakage exposes paid RPC quota
+			// and indexed-data endpoints. Source: trufflehog
+			// `moralis` detector.
+			expression: contextual(`moralis`, `[0-9a-zA-Z]{64}`),
+			keywords:   []string{"moralis"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
