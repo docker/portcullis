@@ -1600,6 +1600,16 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `sm_(?:pat|aat|sat)_[A-Za-z0-9]{16}`,
 			keywords:   []string{"sm_pat_", "sm_aat_", "sm_sat_"},
 		},
+		{
+			// authress-service-client-access-key. Authress publishes
+			// a four-segment access-key shape — client / key-id /
+			// account / signature — separated by literal dots. The
+			// `acc` segment is fixed (case-sensitive in the upstream
+			// rule) which keeps the regex specific. Source: gitleaks
+			// `authress-service-client-access-key`.
+			expression: `(?:sc|ext|scauth|authress)_[A-Za-z0-9]{5,30}\.[A-Za-z0-9]{4,6}\.acc[_-][A-Za-z0-9-]{10,32}\.[A-Za-z0-9+/_=-]{30,120}`,
+			keywords:   []string{"sc_", "ext_", "scauth_", "authress_"},
+		},
 	}
 })
 

@@ -210,6 +210,8 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"settlemint_personal_token", "sm_pat_" + strings.Repeat("a", 16)},
 		{"settlemint_application_token", "sm_aat_" + strings.Repeat("a", 16)},
 		{"settlemint_service_token", "sm_sat_" + strings.Repeat("a", 16)},
+		{"authress_sc", "sc_" + strings.Repeat("a", 10) + "." + strings.Repeat("b", 5) + ".acc_" + strings.Repeat("c", 12) + "." + strings.Repeat("d", 40)},
+		{"authress_authress", "authress_" + strings.Repeat("a", 20) + "." + strings.Repeat("b", 6) + ".acc-" + strings.Repeat("c", 16) + "." + strings.Repeat("d", 60)},
 		{"gitlab_incoming_mail_token", "glimt-" + strings.Repeat("a", 25)},
 		{"sidekiq_gems_url", "https://cafebabe:deadbeef@gems.contribsys.com/"},
 		{"sidekiq_enterprise_url", "http://cafeb4b3:d3adb33f@enterprise.contribsys.com/path"},
