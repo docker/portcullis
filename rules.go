@@ -1462,6 +1462,16 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`sendbird`, `[a-f0-9]{40}`),
 			keywords:   []string{"sendbird"},
 		},
+		{
+			// okta-access-token. Okta API tokens start with two
+			// zero digits and run 42 chars total of word + `=-`
+			// chars. The leading `00` is part of the body, not a
+			// vendor prefix, so the rule is anchored on the
+			// `okta` vendor word. High blast radius: SSO directory
+			// access if leaked. Source: gitleaks `okta-access-token`.
+			expression: contextual(`okta`, `00[\w=-]{40}`),
+			keywords:   []string{"okta"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
