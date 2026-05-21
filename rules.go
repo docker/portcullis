@@ -1548,6 +1548,15 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`logz`, `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`),
 			keywords:   []string{"logz"},
 		},
+		{
+			// etherscan-api-key. 34-char uppercase + digits API key
+			// for the Etherscan block explorer; the body shape is
+			// generic so the rule is anchored on the `etherscan`
+			// vendor keyword. Source: trufflehog `etherscan`
+			// detector.
+			expression: contextual(`etherscan`, `[0-9A-Z]{34}`),
+			keywords:   []string{"etherscan"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
