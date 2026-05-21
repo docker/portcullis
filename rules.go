@@ -1525,6 +1525,14 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`deepseek`, `sk-[a-z0-9]{32}`),
 			keywords:   []string{"deepseek"},
 		},
+		{
+			// assemblyai-api-key. 32-char hex API key for the
+			// AssemblyAI speech-to-text platform; anchored on the
+			// `assemblyai` vendor keyword because the body shape is
+			// generic. Source: trufflehog `assemblyai` detector.
+			expression: contextual(`assemblyai`, `[a-f0-9]{32}`),
+			keywords:   []string{"assemblyai"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
