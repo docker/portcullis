@@ -3,14 +3,14 @@ package portcullis
 // kwMask is a fixed-size bitset over keyword indices, used to record
 // which patterns occurred in a scanned input and which keywords each
 // rule subscribes to. Storing it as a small array keeps every test
-// branch-free; the cap of 256 indices accommodates today's catalogue
-// of ~225 unique keywords with comfortable headroom for future rules
+// branch-free; the cap of 320 indices accommodates today's catalogue
+// of ~260 unique keywords with comfortable headroom for future rules
 // (an overflow trips a deterministic panic in [buildAhoCorasick]).
-type kwMask [4]uint64
+type kwMask [5]uint64
 
-func (m *kwMask) empty() bool { return m[0]|m[1]|m[2]|m[3] == 0 }
+func (m *kwMask) empty() bool { return m[0]|m[1]|m[2]|m[3]|m[4] == 0 }
 func (m *kwMask) overlaps(other kwMask) bool {
-	return m[0]&other[0]|m[1]&other[1]|m[2]&other[2]|m[3]&other[3] != 0
+	return m[0]&other[0]|m[1]&other[1]|m[2]&other[2]|m[3]&other[3]|m[4]&other[4] != 0
 }
 func (m *kwMask) set(idx int) { m[idx>>6] |= 1 << uint(idx&63) }
 
@@ -61,7 +61,7 @@ type acAutomaton struct {
 // buildAhoCorasick compiles patterns into an automaton. Patterns
 // must be lower-cased ASCII.
 func buildAhoCorasick(patterns []string) *acAutomaton {
-	if len(patterns) > 256 {
+	if len(patterns) > 320 {
 		panic("portcullis: too many AC patterns for kwMask")
 	}
 
@@ -200,6 +200,7 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 			mask[1] |= ap[1]
 			mask[2] |= ap[2]
 			mask[3] |= ap[3]
+			mask[4] |= ap[4]
 		}
 		for i < n && off != 0 {
 			raw = next[off+uint32(text[i])]
@@ -211,6 +212,7 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 				mask[1] |= ap[1]
 				mask[2] |= ap[2]
 				mask[3] |= ap[3]
+				mask[4] |= ap[4]
 			}
 		}
 	}
