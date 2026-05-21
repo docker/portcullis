@@ -57,24 +57,37 @@ across goroutines.
 
 ## What it detects
 
-The built-in catalogue covers ~200 patterns spanning:
+The built-in catalogue covers ~220 patterns spanning:
 
-- Cloud providers — AWS, GCP service accounts, Azure Storage,
-  Azure DevOps, DigitalOcean, Tencent, Alibaba.
-- Source forges — GitHub (PAT / OAuth / app / fine-grained / refresh),
-  GitLab, Bitbucket, Docker Hub (PAT / OAT), JFrog, Sonar.
-- LLM / AI providers — OpenAI, Anthropic, Google (AIza), xAI / Grok,
-  Cohere, Groq, Perplexity, Replicate, OpenRouter, Hugging Face.
+- Cloud providers — AWS (incl. STS `ABIA` / context-specific `ACCA`
+  prefixes), GCP service accounts, Azure Storage, Azure DevOps,
+  Azure AD client secrets, DigitalOcean, Tencent, Alibaba, Yandex,
+  Akamai, Cloudflare Origin CA.
+- Source forges & CI — GitHub (PAT / OAuth / app / fine-grained /
+  refresh), GitLab (full token family incl. `glimt-` /
+  `glagent-` / `glsoat-` / routable variants), Bitbucket,
+  Docker Hub (PAT / OAT), JFrog (key + reference token), Sonar,
+  Buildkite, CircleCI, Harness (`pat.` / `sat.`), Authress.
+- LLM / AI providers — OpenAI, Anthropic, DeepSeek, Google (AIza),
+  xAI / Grok, Cohere, Groq, Perplexity, Replicate, OpenRouter,
+  Hugging Face (user `hf_` + organisation `api_org_`),
+  AssemblyAI, Deepgram.
 - Payment processors — Stripe (publishable / secret / restricted /
   webhook), Razorpay, Adyen, Plaid, Square, Braintree.
-- Communication & ops — Slack (legacy & rotating), Discord (bot &
-  webhook), Telegram, Twilio, SendGrid, Mailgun, Mailchimp.
-- SaaS & developer tools — Figma, Contentful, HubSpot, LaunchDarkly,
-  Doppler, 1Password, Vercel, Netlify, Render, Fly.io.
-- Infra & tooling — HashiCorp Vault (service / batch / recovery),
-  Terraform Cloud, Tailscale, Cloudflare Origin CA, Akamai,
-  PlanetScale, Supabase, MongoDB / Postgres / MySQL / Redis / AMQP
-  connection-string passwords, PEM private keys, JWTs, and more.
+- Communication & ops — Slack (legacy, rotating, webhooks),
+  Discord (bot & webhook), Telegram, Twilio, SendGrid, Mailgun,
+  Mailchimp, Sendinblue, Microsoft Teams webhooks.
+- SaaS & developer tools — Figma, Contentful, HubSpot, LaunchDarkly
+  (incl. `sdk-` keys), Doppler (full family), 1Password, Vercel,
+  Netlify, Render, Notion, Linear, Trello, ClickUp, Okta, ngrok,
+  Cisco Meraki, SettleMint, Fly.io macaroons, Heroku v1/v2,
+  OpenShift `sha256~` tokens.
+- Infra, web3 & databases — HashiCorp Vault (service / batch /
+  recovery), Terraform Cloud, Tailscale, PlanetScale, Supabase,
+  MongoDB / Postgres / MySQL / Redis / AMQP connection-string
+  passwords, Sidekiq Pro/Enterprise gem-server URLs,
+  Alchemy / Etherscan / Moralis (web3), Logz.io,
+  PEM private keys, JWTs, and more.
 
 Connection-string rules (MongoDB, Postgres, MySQL, Redis, AMQP, Azure
 Storage) redact only the password / key span so log readers can still
@@ -117,15 +130,13 @@ only when text actually changes.
 On an Apple M4 Max scrubbing a 9000-byte clean payload and a
 secret-bearing 1.5 KB payload:
 
-On an Apple M4 Max scrubbing a 9000-byte clean payload and a
-secret-bearing 1.5 KB payload:
-
 ```
-BenchmarkAhoScanCleanInput-16        132150     18097 ns/op   497.31 MB/s     0 B/op    0 allocs/op
-BenchmarkRedactCleanInput-16         133822     18071 ns/op                   0 B/op    0 allocs/op
-BenchmarkContainsCleanInput-16       131232     18105 ns/op                   0 B/op    0 allocs/op
-BenchmarkRedactWithSecret-16         538251      4408 ns/op                1826 B/op    3 allocs/op
-BenchmarkContainsWithSecret-16       676144      3510 ns/op                   0 B/op    0 allocs/op
+BenchmarkAhoScanCleanInput-16        257198      4823 ns/op  1865.95 MB/s     0 B/op    0 allocs/op
+BenchmarkAhoScanWithKeyword-16      1251084       956.0 ns/op 1636.96 MB/s     0 B/op    0 allocs/op
+BenchmarkRedactCleanInput-16         228036      4803 ns/op                    0 B/op    0 allocs/op
+BenchmarkContainsCleanInput-16       233336      4782 ns/op                    0 B/op    0 allocs/op
+BenchmarkRedactWithSecret-16         565590      2094 ns/op                 1585 B/op    2 allocs/op
+BenchmarkContainsWithSecret-16       912943      1312 ns/op                    0 B/op    0 allocs/op
 ```
 
 The AC scan dominates the clean-input path — `Redact` and `Contains`
