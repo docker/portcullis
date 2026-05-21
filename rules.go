@@ -1472,6 +1472,13 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`okta`, `00[\w=-]{40}`),
 			keywords:   []string{"okta"},
 		},
+		{
+			// trello-access-token. 32-char alphanumeric token for
+			// the Trello REST API. Anchored on the `trello`
+			// keyword because the body has no unique prefix.
+			expression: contextual(`trello`, `[a-z0-9]{32}`),
+			keywords:   []string{"trello"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
