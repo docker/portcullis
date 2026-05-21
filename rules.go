@@ -81,9 +81,13 @@ func contextual(vendor, body string) string {
 var rules = sync.OnceValue(func() []rule {
 	return []rule{
 		{
-			// aws-access-key-id
-			expression: asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16})` + quote),
-			keywords:   []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA"},
+			// aws-access-key-id. Prefix list mirrors the gitleaks
+			// default rule: `ABIA` is the STS bearer token prefix and
+			// `ACCA` is the context-specific (vended) credential
+			// prefix; both grant the same level of access as a
+			// regular access key while the session is valid.
+			expression: asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA|ABIA|ACCA)[A-Z0-9]{16})` + quote),
+			keywords:   []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA", "ABIA", "ACCA"},
 		},
 		{
 			// aws-secret-access-key

@@ -200,6 +200,10 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"rediss_conn_string", "rediss://user:" + strings.Repeat("p", 24) + "@redis.example.com:6380"},
 		{"amqp_conn_string", "amqp://guest:" + strings.Repeat("p", 24) + "@rabbit.example.com"},
 		{"amqps_conn_string", "amqps://user:" + strings.Repeat("p", 24) + "@rabbit.example.com:5671"},
+		// Eighth batch — gitleaks parity additions cross-checked
+		// against the gitleaks default ruleset.
+		{"aws_access_key_abia", "ABIA" + strings.Repeat("A", 16)},
+		{"aws_access_key_acca", "ACCA" + strings.Repeat("A", 16)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
