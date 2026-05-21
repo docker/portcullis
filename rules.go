@@ -1487,6 +1487,16 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`meraki`, `[a-f0-9]{40}`),
 			keywords:   []string{"meraki"},
 		},
+		{
+			// clickup-personal-token. ClickUp PATs follow
+			// `pk_<7-9 digits>_<32 upper+digits>`; the digit run
+			// after `pk_` plus the all-caps body make the shape
+			// distinctive enough to anchor without a vendor
+			// keyword. Source: trufflehog `clickuppersonaltoken`
+			// detector.
+			expression: `\bpk_[0-9]{7,9}_[0-9A-Z]{32}\b`,
+			keywords:   []string{"pk_"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
