@@ -1575,6 +1575,15 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `api_org_[A-Za-z0-9]{34}`,
 			keywords:   []string{"api_org_"},
 		},
+		{
+			// settlemint-tokens. Three token families share the same
+			// shape: personal (`sm_pat_`), application (`sm_aat_`),
+			// and service (`sm_sat_`) access tokens, each with a
+			// 16-char alphanumeric body. Source: gitleaks
+			// `settlemint-{personal,application,service}-access-token`.
+			expression: `sm_(?:pat|aat|sat)_[A-Za-z0-9]{16}`,
+			keywords:   []string{"sm_pat_", "sm_aat_", "sm_sat_"},
+		},
 	}
 })
 
