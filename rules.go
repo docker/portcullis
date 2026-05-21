@@ -1567,6 +1567,14 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `(?:pat|sat)\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9]{24}\.[A-Za-z0-9]{20}`,
 			keywords:   []string{"pat.", "sat."},
 		},
+		{
+			// huggingface-organization-api-token. Legacy Hugging
+			// Face org tokens carry the `api_org_` prefix and a
+			// 34-char alphanumeric body. Still active alongside
+			// the modern `hf_` user tokens already covered.
+			expression: `api_org_[A-Za-z0-9]{34}`,
+			keywords:   []string{"api_org_"},
+		},
 	}
 })
 
