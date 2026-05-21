@@ -1506,6 +1506,16 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `alcht_[0-9a-zA-Z]{30}`,
 			keywords:   []string{"alcht_"},
 		},
+		{
+			// ngrok-auth-token. ngrok agent auth tokens follow
+			// `2<26 alnum>_<digit><20 alnum>` — a 49-char body
+			// whose structural `_<digit>` mid-break is distinctive
+			// but not unique on its own, so the rule is anchored on
+			// the `ngrok` vendor keyword. Source: trufflehog
+			// `ngrok` detector.
+			expression: contextual(`ngrok`, `2[A-Za-z0-9]{26}_[0-9][A-Za-z0-9]{20}`),
+			keywords:   []string{"ngrok"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets

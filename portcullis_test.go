@@ -217,6 +217,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"cisco_meraki_api_key", "meraki_api_key=" + strings.Repeat("a", 40)},
 		{"clickup_personal_token", "pk_1234567_" + strings.Repeat("A", 32)},
 		{"alchemy_api_key", "alcht_" + strings.Repeat("a", 30)},
+		{"ngrok_auth_token", "NGROK_AUTHTOKEN=2" + strings.Repeat("a", 26) + "_5" + strings.Repeat("b", 20)},
 		{"gitlab_incoming_mail_token", "glimt-" + strings.Repeat("a", 25)},
 		{"sidekiq_gems_url", "https://cafebabe:deadbeef@gems.contribsys.com/"},
 		{"sidekiq_enterprise_url", "http://cafeb4b3:d3adb33f@enterprise.contribsys.com/path"},
