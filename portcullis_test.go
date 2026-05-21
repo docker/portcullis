@@ -210,6 +210,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"settlemint_personal_token", "sm_pat_" + strings.Repeat("a", 16)},
 		{"settlemint_application_token", "sm_aat_" + strings.Repeat("a", 16)},
 		{"settlemint_service_token", "sm_sat_" + strings.Repeat("a", 16)},
+		{"gitlab_incoming_mail_token", "glimt-" + strings.Repeat("a", 25)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

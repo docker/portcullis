@@ -1120,6 +1120,13 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"glsoat-"},
 		},
 		{
+			// gitlab-incoming-mail-token. `glimt-` prefix and a
+			// 25-char body; lets attackers impersonate the GitLab
+			// mail-receive endpoint (create issues / notes by email).
+			expression: `glimt-[0-9a-zA-Z_-]{25}`,
+			keywords:   []string{"glimt-"},
+		},
+		{
 			// gitlab-pat-routable. The 2024 routable PAT format extends
 			// the legacy `glpat-<20>` shape with a longer (27-300 char)
 			// body and an appended `.<2-char prefix><7-char hex>`
