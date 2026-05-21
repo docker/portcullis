@@ -1562,6 +1562,15 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `amqps?://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
 			keywords:   []string{"amqp://", "amqps://"},
 		},
+		{
+			// sidekiq-sensitive-url. Sidekiq Pro / Enterprise gem
+			// servers embed paid-license credentials in the URL
+			// (`https://<user>:<pass>@gems.contribsys.com`). Only
+			// the password span is redacted so the host stays
+			// readable. Source: gitleaks `sidekiq-sensitive-url`.
+			expression: `(?i)https?://[a-f0-9]{8}:(?P<secret>[a-f0-9]{8})@(?:gems|enterprise)\.contribsys\.com`,
+			keywords:   []string{"contribsys.com"},
+		},
 
 		// --- Eighth batch: prefix-anchored vendor tokens cross-
 		// checked against the gitleaks default ruleset.
