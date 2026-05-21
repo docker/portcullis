@@ -1540,6 +1540,14 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`deepgram`, `[a-f0-9]{40}`),
 			keywords:   []string{"deepgram"},
 		},
+		{
+			// logzio-shipping-token. UUID-shaped shipping token for
+			// the Logz.io log-management platform; leakage allows
+			// arbitrary log injection into the customer's account.
+			// Source: trufflehog `logzio` detector.
+			expression: contextual(`logz`, `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`),
+			keywords:   []string{"logz"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
