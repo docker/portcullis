@@ -1479,6 +1479,14 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`trello`, `[a-z0-9]{32}`),
 			keywords:   []string{"trello"},
 		},
+		{
+			// cisco-meraki-api-key. 40-char hex API key for the
+			// Cisco Meraki cloud-network controller; admin keys
+			// allow firmware / firewall reconfiguration. Source:
+			// gitleaks `cisco-meraki-api-key`.
+			expression: contextual(`meraki`, `[a-f0-9]{40}`),
+			keywords:   []string{"meraki"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
