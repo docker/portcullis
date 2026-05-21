@@ -1516,6 +1516,15 @@ var rules = sync.OnceValue(func() []rule {
 			expression: contextual(`ngrok`, `2[A-Za-z0-9]{26}_[0-9][A-Za-z0-9]{20}`),
 			keywords:   []string{"ngrok"},
 		},
+		{
+			// deepseek-api-key. DeepSeek (LLM provider) issues
+			// `sk-<32 alnum>` keys; the `sk-` prefix is shared with
+			// many vendors (OpenAI, OpenRouter, etc.) so the rule
+			// is anchored on the `deepseek` vendor keyword. Source:
+			// trufflehog `deepseek` detector.
+			expression: contextual(`deepseek`, `sk-[a-z0-9]{32}`),
+			keywords:   []string{"deepseek"},
+		},
 
 		// --- Seventh batch of additions: patterns identified by
 		// cross-referencing gitleaks, trufflehog, and detect-secrets
