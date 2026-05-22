@@ -121,3 +121,39 @@ func TestRunSanitisesMultilineSecrets(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(out, "\n"), "value must not introduce extra newlines: %q", out)
 	assert.NotContains(t, strings.TrimSuffix(out, "\n"), "\n")
 }
+
+// TestRunOutputIsDeterministic pins the contract that two runs over
+// the same tree must produce byte-identical output, regardless of
+// worker count or scheduling. The collector reorders worker results
+// into walker (lexical) order so concurrency is invisible to the
+// caller — a property scripts and CI diffs depend on.
+func TestRunOutputIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, name+".env"),
+			[]byte("TOKEN="+githubPAT+"\n"),
+			0o644,
+		))
+	}
+
+	runOnce := func(workers string) string {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"-workers=" + workers, root}, &stdout, &stderr)
+		require.Equal(t, exitFound, code)
+		require.Empty(t, stderr.String())
+		return stdout.String()
+	}
+
+	want := runOnce("1")
+	require.NotEmpty(t, want)
+
+	// Many workers: scheduling can finish files in any order, but
+	// the collector must hand them back in walker order anyway.
+	for range 8 {
+		assert.Equal(t, want, runOnce("8"),
+			"output must be byte-identical across runs / worker counts")
+	}
+}

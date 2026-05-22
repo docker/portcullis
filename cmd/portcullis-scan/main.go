@@ -9,9 +9,9 @@
 // Paths are relative to the scan root. Newlines and carriage returns
 // inside a matched value are collapsed to spaces so each match
 // remains on a single line; this only affects display, not detection.
-// Files are scanned in parallel; matches inside a single file stay
-// in left-to-right order, but cross-file output order is not
-// guaranteed.
+// Files are scanned in parallel; output order matches the walker's
+// lexical order, so two runs over the same tree produce identical
+// output regardless of worker count or scheduling.
 //
 // Usage:
 //
@@ -95,9 +95,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 // Files are processed by `workers` goroutines fed from a channel.
 // Regex matching dominates the cost (>80% of CPU on real
 // repositories) and is single-threaded per call, so giving each core
-// its own file pays for itself trivially. Output for a single file
-// stays contiguous because one file is owned by one worker; the
-// cross-file order is whatever the workers happen to finish in.
+// its own file pays for itself trivially. Output order matches the
+// walker's lexical order: the walker tags each file with a sequence
+// number, workers preserve it, and the collector reorders results
+// before writing so the output is deterministic across runs.
 func scan(root string, maxSize int64, workers int, out, errOut io.Writer) (bool, error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -109,27 +110,33 @@ func scan(root string, maxSize int64, workers int, out, errOut io.Writer) (bool,
 		return scanFile(root, root, maxSize, out, errOut)
 	}
 
-	paths := make(chan string, workers*4)
-	// One slot per file emits 0..n lines; buffering matches `paths`
-	// so a slow stdout doesn't stall the workers.
-	results := make(chan []byte, workers*4)
+	type job struct {
+		seq  int
+		path string
+	}
+	type result struct {
+		seq int
+		buf []byte // nil when the file produced no matches
+	}
+
+	jobs := make(chan job, workers*4)
+	results := make(chan result, workers*4)
 
 	var wg sync.WaitGroup
 	for range workers {
 		wg.Go(func() {
-			for path := range paths {
-				if buf := scanFileBytes(path, root, maxSize, errOut); buf != nil {
-					results <- buf
-				}
+			for j := range jobs {
+				results <- result{seq: j.seq, buf: scanFileBytes(j.path, root, maxSize, errOut)}
 			}
 		})
 	}
 
-	// Walker: push every regular file's path into the queue and
-	// close the queue when done so workers can drain.
+	// Walker: emit a job per regular file and close the queue when
+	// done so workers can drain.
 	walkErrCh := make(chan error, 1)
 	go func() {
-		defer close(paths)
+		defer close(jobs)
+		seq := 0
 		walkErrCh <- filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, err)
@@ -141,27 +148,52 @@ func scan(root string, maxSize int64, workers int, out, errOut io.Writer) (bool,
 			if !d.Type().IsRegular() {
 				return nil
 			}
-			paths <- path
+			jobs <- job{seq: seq, path: path}
+			seq++
 			return nil
 		})
 	}()
 
-	// Collector: close `results` once all workers are done.
+	// Reaper: close `results` once all workers drain.
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
+	// Collector: emit chunks in walker (sequence) order. Out-of-order
+	// results are stashed in a small reorder buffer keyed by seq;
+	// each contiguous run is flushed as soon as the missing prefix
+	// arrives.
+	pending := make(map[int][]byte)
+	nextSeq := 0
 	var found bool
-	for buf := range results {
+	write := func(buf []byte) error {
+		if len(buf) == 0 {
+			return nil
+		}
 		found = true
-		if _, err := out.Write(buf); err != nil {
-			// Drain so producers don't block forever.
-			go func() {
-				for range results {
-				}
-			}()
+		_, err := out.Write(buf)
+		return err
+	}
+	for r := range results {
+		if r.seq != nextSeq {
+			pending[r.seq] = r.buf
+			continue
+		}
+		if err := write(r.buf); err != nil {
 			return found, err
+		}
+		nextSeq++
+		for {
+			buf, ok := pending[nextSeq]
+			if !ok {
+				break
+			}
+			delete(pending, nextSeq)
+			if err := write(buf); err != nil {
+				return found, err
+			}
+			nextSeq++
 		}
 	}
 	return found, <-walkErrCh
