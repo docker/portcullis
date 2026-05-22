@@ -38,7 +38,7 @@ two design constraints:
 go get github.com/docker/portcullis
 ```
 
-Requires Go 1.22+.
+Requires Go 1.26.3+.
 
 ## API
 
@@ -121,7 +121,7 @@ gogo -l         # list every task with its description
 
 The linter configuration lives in [`.golangci.yml`](./.golangci.yml).
 The matching CI workflow runs lint + race-enabled tests against the
-go.mod floor (Go 1.22) and the latest stable Go release on every PR
+go.mod floor (Go 1.26.3) and the latest stable Go release on every PR
 — see [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
 
 ## Performance

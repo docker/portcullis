@@ -49,7 +49,7 @@ jobs:
       matrix:
         # Test against the floor declared in go.mod and the current
         # stable release so a regression on either edge fails CI.
-        go-version: ["1.22", "stable"]
+        go-version: ["1.26.3", "stable"]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

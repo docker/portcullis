@@ -1,6 +1,6 @@
 module github.com/docker/portcullis
 
-go 1.22
+go 1.26.3
 
 require github.com/stretchr/testify v1.11.1
 
