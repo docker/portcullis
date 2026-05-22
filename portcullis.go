@@ -1,6 +1,7 @@
 package portcullis
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -8,6 +9,78 @@ import (
 // match any rule's keyword pre-filter — see TestMarkerIsNotASecret
 // for the safety property that makes [Redact] idempotent.
 const Marker = "[REDACTED]"
+
+// Match describes a single secret span detected in an input. Start
+// and End are byte offsets into the original text and delimit the
+// same span [Redact] would replace with [Marker]: when the matching
+// rule defines a (?P<secret>…) named subgroup, the span covers only
+// that subgroup; otherwise it covers the whole match. Value is the
+// substring text[Start:End] for caller convenience.
+type Match struct {
+	Start int
+	End   int
+	Value string
+}
+
+// Find returns every secret span detected in text, in left-to-right
+// order. Overlapping matches are deduplicated: when two rules flag
+// overlapping spans (e.g. a Grafana legacy `eyJrIjoi…` token whose
+// suffix also matches the generic JWT shape) Find keeps the longest
+// span and drops the shorter one, so each underlying secret is
+// reported once.
+//
+// Find is safe for concurrent use. The returned slice is freshly
+// allocated and owned by the caller.
+func Find(text string) []Match {
+	if text == "" {
+		return nil
+	}
+	rs := compiledRuleSet()
+	found := rs.ac.scan(text)
+	if found.empty() {
+		return nil
+	}
+	var matches []Match
+	for i := range rs.rules {
+		r := &rs.rules[i]
+		if !found.overlaps(r.kwBits) {
+			continue
+		}
+		re, secretIdx := r.compile()
+		for _, m := range re.FindAllStringSubmatchIndex(text, -1) {
+			s, e := redactSpan(m, secretIdx)
+			matches = append(matches, Match{Start: s, End: e, Value: text[s:e]})
+		}
+	}
+	return dedupOverlapping(matches)
+}
+
+// dedupOverlapping collapses overlapping matches to one per underlying
+// span. Sorting by Start asc, End desc lets a single greedy walk keep
+// the leftmost-longest match and drop anything contained in or
+// touching it. The relative left-to-right order of surviving matches
+// is preserved.
+func dedupOverlapping(matches []Match) []Match {
+	if len(matches) < 2 {
+		return matches
+	}
+	slices.SortFunc(matches, func(a, b Match) int {
+		if a.Start != b.Start {
+			return a.Start - b.Start
+		}
+		return b.End - a.End
+	})
+	out := matches[:0]
+	lastEnd := -1
+	for _, m := range matches {
+		if m.Start < lastEnd {
+			continue
+		}
+		out = append(out, m)
+		lastEnd = m.End
+	}
+	return out
+}
 
 // Contains reports whether text matches any built-in secret rule.
 // It is safe for concurrent use.

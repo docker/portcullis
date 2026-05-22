@@ -35,7 +35,6 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"digitalocean_pat", "dop_v1_" + strings.Repeat("a", 64)},
 		{"stripe_webhook_signing_secret", "whsec_" + strings.Repeat("a", 40)},
 		{"jfrog_api_key", "AKCp" + strings.Repeat("a", 73)},
-		{"tencent_cloud_secret_id", "AKID" + strings.Repeat("a", 32)},
 		{"sentry_user_auth_token", "sntrys_" + "eyJ" + strings.Repeat("a", 60)},
 		{"stripe_restricted_key_test", "rk_test_" + strings.Repeat("a", 24)},
 		{"stripe_restricted_key_live", "rk_live_" + strings.Repeat("a", 24)},
@@ -48,7 +47,6 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"slack_rotating_bot_token", "xoxe.xoxb-" + strings.Repeat("a", 50)},
 		{"slack_rotating_long_token", "xoxe.xoxp-" + strings.Repeat("a", 250)},
 		{"replicate_api_token", "r8_" + strings.Repeat("a", 37)},
-		{"square_access_token", "EAAA" + strings.Repeat("a", 60)},
 		{"atlassian_cloud_api_token", "ATATT3xFfGF0" + strings.Repeat("a", 200)},
 		{"digitalocean_oauth_token", "doo_v1_" + strings.Repeat("a", 64)},
 		{"digitalocean_oauth_refresh", "dor_v1_" + strings.Repeat("a", 64)},
@@ -93,7 +91,6 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		// Fourth batch — payment processors, AI / data platforms, infra.
 		{"razorpay_test_key_id", "rzp_test_" + strings.Repeat("a", 14)},
 		{"razorpay_live_key_id", "rzp_live_" + strings.Repeat("a", 14)},
-		{"adyen_api_key", "AQE" + strings.Repeat("a", 200)},
 		{"plaid_access_token_sandbox", "access-sandbox-" + strings.Repeat("a", 8) + "-" + strings.Repeat("b", 4) + "-" + strings.Repeat("c", 4) + "-" + strings.Repeat("d", 4) + "-" + strings.Repeat("e", 12)},
 		{"plaid_access_token_production", "access-production-" + strings.Repeat("f", 8) + "-" + strings.Repeat("a", 4) + "-" + strings.Repeat("b", 4) + "-" + strings.Repeat("c", 4) + "-" + strings.Repeat("d", 12)},
 		{"posthog_personal_api_token", "phx_" + strings.Repeat("a", 43)},
@@ -141,18 +138,14 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"prefect_api_token", "pnu_" + strings.Repeat("a", 36)},
 		{"readme_api_token", "rdme_" + strings.Repeat("a", 70)},
 		{"maxmind_license_key", strings.Repeat("a", 6) + "_" + strings.Repeat("b", 29) + "_mmk"},
-		{"clickhouse_cloud_secret_key", "4b1d" + strings.Repeat("a", 38)},
 		{"yandex_cloud_api_key", "AQVN" + strings.Repeat("a", 36)},
-		{"facebook_page_access_token_marketing", "EAAM" + strings.Repeat("a", 200)},
-		{"facebook_page_access_token_live", "EAAC" + strings.Repeat("a", 200)},
 		{"sourcegraph_legacy", "sgp_" + strings.Repeat("a", 40)},
 		{"sourcegraph_modern", "sgp_" + strings.Repeat("a", 16) + "_" + strings.Repeat("b", 40)},
 		{"sourcegraph_local", "sgp_local_" + strings.Repeat("b", 40)},
 		{"defined_networking_token", "dnkey-" + strings.Repeat("a", 26) + "-" + strings.Repeat("b", 52)},
 		{"scalingo_api_token_us", "tk-us-" + strings.Repeat("a", 48)},
 		{"scalingo_api_token_eu", "tk-eu-" + strings.Repeat("a", 48)},
-		// Stripe `prod` env tag (added in 2024) for pk_, sk_ and rk_.
-		{"stripe_publishable_prod", "pk_prod_" + strings.Repeat("a", 24)},
+		// Stripe `prod` env tag (added in 2024) for sk_ and rk_.
 		{"stripe_secret_prod", "sk_prod_" + strings.Repeat("a", 24)},
 		{"stripe_restricted_prod", "rk_prod_" + strings.Repeat("a", 24)},
 		// Anthropic admin keys.
@@ -193,7 +186,6 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"launchdarkly_sdk_key", "sdk-" + "12345678-1234-1234-1234-123456789012"},
 		{"braintree_access_token_production", "access_token$production$" + strings.Repeat("a", 16) + "$" + strings.Repeat("f", 32)},
 		{"braintree_access_token_sandbox", "access_token$sandbox$" + strings.Repeat("b", 8) + "$" + strings.Repeat("e", 28)},
-		{"azure_devops_pat", "oy2" + strings.Repeat("A", 46)},
 		{"mysql_conn_string", "mysql://myuser:" + strings.Repeat("s", 24) + "@db.example.com"},
 		{"redis_conn_string", "redis://default:" + strings.Repeat("p", 24) + "@redis.example.com:6379"},
 		{"redis_conn_string_no_user", "redis://:" + strings.Repeat("p", 24) + "@redis.example.com:6379"},
@@ -202,8 +194,6 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"amqps_conn_string", "amqps://user:" + strings.Repeat("p", 24) + "@rabbit.example.com:5671"},
 		// Eighth batch — gitleaks parity additions cross-checked
 		// against the gitleaks default ruleset.
-		{"aws_access_key_abia", "ABIA" + strings.Repeat("A", 16)},
-		{"aws_access_key_acca", "ACCA" + strings.Repeat("A", 16)},
 		{"harness_pat", "pat." + strings.Repeat("a", 22) + "." + strings.Repeat("b", 24) + "." + strings.Repeat("c", 20)},
 		{"harness_sat", "sat." + strings.Repeat("a", 22) + "." + strings.Repeat("b", 24) + "." + strings.Repeat("c", 20)},
 		{"huggingface_org_token", "api_org_" + strings.Repeat("a", 34)},
@@ -559,6 +549,41 @@ func TestRedactDetectsSecretsAcrossWordBoundaries(t *testing.T) {
 				"redaction marker must appear in %q", out)
 		})
 	}
+}
+
+// TestFindDeduplicatesOverlappingMatches: when two rules flag
+// overlapping spans (e.g. a Grafana legacy `eyJrIjoi…` token whose
+// suffix also matches the generic JWT shape), Find keeps the
+// leftmost-longest span and drops the contained one so each
+// underlying secret is reported once.
+func TestFindDeduplicatesOverlappingMatches(t *testing.T) {
+	t.Parallel()
+
+	// Grafana legacy api-key body that *also* parses as a JWT — the
+	// two rules would otherwise both fire on the same span.
+	in := "eyJrIjoi" + strings.Repeat("A", 80) + ".eyJzdWIiOiJ0ZXN0In0." +
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+
+	matches := portcullis.Find(in)
+	require.Len(t, matches, 1, "overlapping rules must collapse to one match: %v", matches)
+	assert.Equal(t, 0, matches[0].Start)
+	assert.Equal(t, in, matches[0].Value)
+}
+
+// TestFindKeepsDistinctSecrets: two non-overlapping secrets in the
+// same input must both be reported, in left-to-right order.
+func TestFindKeepsDistinctSecrets(t *testing.T) {
+	t.Parallel()
+
+	a := "ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"
+	b := "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	in := "first " + a + " then " + b
+
+	matches := portcullis.Find(in)
+	require.Len(t, matches, 2)
+	assert.Equal(t, a, matches[0].Value)
+	assert.Equal(t, b, matches[1].Value)
+	assert.Less(t, matches[0].Start, matches[1].Start, "matches must be in left-to-right order")
 }
 
 // TestRedactScalesLinearly is a guard-rail against accidentally

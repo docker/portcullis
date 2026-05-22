@@ -40,3 +40,15 @@ func ExampleContains() {
 	// false
 	// true
 }
+
+func ExampleFind() {
+	in := "first ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD then " +
+		"postgresql://app:hunter2supersecret@db.internal/orders"
+
+	for _, m := range portcullis.Find(in) {
+		fmt.Printf("%d-%d: %s\n", m.Start, m.End, m.Value)
+	}
+	// Output:
+	// 6-46: ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD
+	// 69-87: hunter2supersecret
+}
