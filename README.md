@@ -59,9 +59,8 @@ across goroutines.
 
 The built-in catalogue covers ~245 patterns spanning:
 
-- Cloud providers — AWS (incl. STS `ABIA` / context-specific `ACCA`
-  prefixes), GCP service accounts, Azure Storage, Azure DevOps,
-  Azure AD client secrets, DigitalOcean, Tencent, Alibaba, Yandex,
+- Cloud providers — AWS, GCP service accounts, Azure Storage,
+  Azure AD client secrets, DigitalOcean, Yandex,
   Akamai, Cloudflare Origin CA.
 - Source forges & CI — GitHub (PAT / OAuth / app / fine-grained /
   refresh), GitLab (full token family incl. `glimt-` /
@@ -73,8 +72,8 @@ The built-in catalogue covers ~245 patterns spanning:
   Hugging Face (user `hf_` + organisation `api_org_`),
   AssemblyAI, Deepgram, NVIDIA NIM (`nvapi-`),
   LangSmith (`lsv2_pt_` / `lsv2_sk_`), Pinecone (`pcsk_`).
-- Payment processors — Stripe (publishable / secret / restricted /
-  webhook), Razorpay, Adyen, Plaid, Square, Braintree.
+- Payment processors — Stripe (secret / restricted /
+  webhook), Razorpay, Plaid, Braintree.
 - Communication & ops — Slack (legacy, rotating, webhooks,
   workflow webhooks), Discord (bot & webhook), Telegram, Twilio,
   SendGrid, Mailgun, Mailchimp, Sendinblue, Microsoft Teams

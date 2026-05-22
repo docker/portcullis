@@ -82,12 +82,12 @@ var rules = sync.OnceValue(func() []rule {
 	return []rule{
 		{
 			// aws-access-key-id. Prefix list mirrors the gitleaks
-			// default rule: `ABIA` is the STS bearer token prefix and
-			// `ACCA` is the context-specific (vended) credential
-			// prefix; both grant the same level of access as a
-			// regular access key while the session is valid.
-			expression: asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA|ABIA|ACCA)[A-Z0-9]{16})` + quote),
-			keywords:   []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA", "ABIA", "ACCA"},
+			// default rule, minus the four-letter prefixes (`ABIA`,
+			// `ACCA`) that proved to be too generic in practice — they
+			// fire on random base64 runs in minified bundles, certificate
+			// data, and crypto test vectors.
+			expression: asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16})` + quote),
+			keywords:   []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA"},
 		},
 		{
 			// aws-secret-access-key
@@ -145,28 +145,14 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"},
 		},
 		{
-			// stripe-publishable-token. Stripe added the `prod` env tag
-			// alongside `test` / `live` in 2024; widening the alternation
-			// keeps the keyword pre-filter cheap (one extra literal) and
-			// stops production-mode publishable keys from leaking through.
-			expression: asSecretGroup(`?P<secret>(?i)pk_(test|live|prod)_[0-9a-z]{10,32}`),
-			keywords:   []string{"pk_test_", "pk_live_", "pk_prod_"},
-		},
-		{
-			// stripe-secret-token (see the publishable rule above for the
-			// `prod` extension rationale).
+			// stripe-secret-token (the `prod` env tag was added by
+			// Stripe in 2024 alongside the legacy `test` / `live`
+			// modes). The publishable-key counterpart (`pk_*`) is
+			// intentionally NOT redacted: Stripe publishable keys are
+			// designed to be embedded in client-side code and are not
+			// considered secret.
 			expression: asSecretGroup(`?P<secret>(?i)sk_(test|live|prod)_[0-9a-z]{10,32}`),
 			keywords:   []string{"sk_test_", "sk_live_", "sk_prod_"},
-		},
-		{
-			// pypi-upload-token
-			expression: `pypi-AgEIcHlwaS5vcmc[A-Za-z0-9\-_]{50,1000}`,
-			keywords:   []string{"pypi-AgEIcHlwaS5vcmc"},
-		},
-		{
-			// gcp-service-account
-			expression: `\"type\": \"service_account\"`,
-			keywords:   []string{"\"type\": \"service_account\""},
 		},
 		{
 			// heroku-api-key
@@ -207,11 +193,6 @@ var rules = sync.OnceValue(func() []rule {
 			// adobe-client-secret
 			expression: `(p8e-)(?i)[a-z0-9]{32}`,
 			keywords:   []string{"p8e-"},
-		},
-		{
-			// alibaba-access-key-id
-			expression: `(?P<secret>(LTAI)(?i)[a-z0-9]{20})`,
-			keywords:   []string{"LTAI"},
 		},
 		{
 			// alibaba-secret-key
@@ -615,12 +596,6 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"AKCp"},
 		},
 		{
-			// tencent-cloud-secret-id. Tencent's analogue of an AWS
-			// access-key-id, used by the COS / CVM / etc. APIs.
-			expression: `AKID[A-Za-z0-9]{32}`,
-			keywords:   []string{"AKID"},
-		},
-		{
 			// sentry-user-auth-token. The `sntrys_` prefix is followed
 			// by a base64url-encoded JWT-style payload that always
 			// starts with `eyJ` (the base64 of `{"`).
@@ -684,12 +659,6 @@ var rules = sync.OnceValue(func() []rule {
 			// prefix; the fixed 37-char body keeps the rule specific.
 			expression: `r8_[A-Za-z0-9]{37}`,
 			keywords:   []string{"r8_"},
-		},
-		{
-			// square-access-token. Square production / sandbox access
-			// tokens carry the `EAAA` prefix and a 60-character body.
-			expression: `EAAA[A-Za-z0-9_-]{60}`,
-			keywords:   []string{"EAAA"},
 		},
 		{
 			// atlassian-api-token (Cloud). Atlassian Cloud API tokens
@@ -975,16 +944,6 @@ var rules = sync.OnceValue(func() []rule {
 			// scrubbing the half we can identify.
 			expression: `rzp_(test|live)_[A-Za-z0-9]{14}`,
 			keywords:   []string{"rzp_test_", "rzp_live_"},
-		},
-		{
-			// adyen-api-key. Adyen merchant API keys carry the `AQE`
-			// prefix followed by a long base64 body (typically 200+
-			// chars including `=` padding). The 100-char floor and
-			// 400-char ceiling cover every observed shape while
-			// preventing the regex from absorbing arbitrary trailing
-			// alphanumeric content if a key isn't whitespace-terminated.
-			expression: `AQE[A-Za-z0-9+/=]{100,400}`,
-			keywords:   []string{"AQE"},
 		},
 		{
 			// plaid-access-token. Plaid item access tokens have the
@@ -1296,27 +1255,10 @@ var rules = sync.OnceValue(func() []rule {
 		// Vendor-specific cloud / data / dev tokens with distinctive prefixes.
 
 		{
-			// clickhouse-cloud-api-secret-key. ClickHouse Cloud secret
-			// keys are 42 chars total and start with the literal `4b1d`
-			// marker (a vendor-defined leading 4 bytes), followed by a
-			// 38-char alphanumeric body.
-			expression: `4b1d[A-Za-z0-9]{38}`,
-			keywords:   []string{"4b1d"},
-		},
-		{
 			// yandex-cloud-api-key. Service-account API keys carry the
 			// uppercase `AQVN` prefix + 35-38 char base64url body.
 			expression: `AQVN[A-Za-z0-9_-]{35,38}`,
 			keywords:   []string{"AQVN"},
-		},
-		{
-			// facebook-page-access-token. Distinct from the legacy
-			// contextual `facebook-token` rule above. Page access tokens
-			// carry the `EAAM` (live) or `EAAC` (Marketing API) prefix
-			// and a 100-400 char alphanumeric body. The 4th-letter
-			// disambiguates against Square's `EAAA` access-token rule.
-			expression: `EAA[MC][A-Za-z0-9]{100,400}`,
-			keywords:   []string{"EAAM", "EAAC"},
 		},
 		{
 			// sourcegraph-access-token. Sourcegraph (code-search) access
@@ -1629,17 +1571,6 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `access_token\$(?:production|sandbox)\$[a-z0-9]{1,128}\$[a-f0-9]{25,36}`,
 			keywords:   []string{"access_token$"},
 		},
-		{
-			// azure-devops-pat. Azure DevOps personal access tokens
-			// begin with the base64 bytes `oy2` followed by a 43-49
-			// char base64url body. The same PAT authenticates Azure
-			// DevOps REST APIs, NuGet feeds, and Azure Artifacts.
-			expression: `oy2[A-Za-z0-9+/]{43,49}={0,2}`,
-			keywords:   []string{"oy2"},
-		},
-
-		// Connection-string rules (password-only redaction).
-
 		{
 			// mysql-connection-string. Same design as the existing
 			// MongoDB / Postgres rules: only the URI password is
