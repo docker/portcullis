@@ -1713,6 +1713,166 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `(?:sc|ext|scauth|authress)_[A-Za-z0-9]{5,30}\.[A-Za-z0-9]{4,6}\.acc[_-][A-Za-z0-9-]{10,32}\.[A-Za-z0-9+/_=-]{30,120}`,
 			keywords:   []string{"sc_", "ext_", "scauth_", "authress_"},
 		},
+
+		// --- Ninth batch of additions: prefix-anchored credential
+		// formats cross-checked against TruffleHog v3's detector
+		// catalogue (`pkg/detectors/`). Each format is documented
+		// upstream with a unique enough prefix to keep the keyword
+		// pre-filter cheap and the regex tight.
+
+		{
+			// pinecone-api-key (canonical). TruffleHog and Pinecone
+			// docs document the shape `pcsk_<5-6 alnum>_<63 alnum>`.
+			// The existing `pckey_` rule covers a legacy format; this
+			// one fills the gap for the modern issuance.
+			expression: `pcsk_[A-Za-z0-9]{5,6}_[A-Za-z0-9]{63}`,
+			keywords:   []string{"pcsk_"},
+		},
+		{
+			// langsmith-api-key. LangChain LangSmith issues personal
+			// (`lsv2_pt_`) and service (`lsv2_sk_`) tokens with a fixed
+			// `<32 hex>_<10 hex>` body.
+			expression: `lsv2_(?:pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}`,
+			keywords:   []string{"lsv2_pt_", "lsv2_sk_"},
+		},
+		{
+			// nvidia-nim-api-key. NVIDIA's hosted-inference (NIM /
+			// build.nvidia.com) keys carry the `nvapi-` prefix and a
+			// 64-char alphanumeric body.
+			expression: `nvapi-[A-Za-z0-9_-]{64}`,
+			keywords:   []string{"nvapi-"},
+		},
+		{
+			// nightfall-api-key. The Nightfall DLP platform issues
+			// keys shaped `NF-<32 alnum>` — the `NF-` prefix is rare
+			// enough at scale to keep the AC pre-filter selective.
+			expression: `NF-[A-Za-z0-9]{32}`,
+			keywords:   []string{"NF-"},
+		},
+		{
+			// zapier-webhook. Catch hooks let any caller post arbitrary
+			// JSON into a Zap; URL = bearer credential.
+			expression: `https://hooks\.zapier\.com/hooks/catch/[A-Za-z0-9/]{16,}`,
+			keywords:   []string{"hooks.zapier.com"},
+		},
+		{
+			// tines-webhook. The full URL is a bearer credential —
+			// any caller can trigger the storyboard. The hostname /
+			// path shape is documented by Tines.
+			expression: `https://[\w-]+\.tines\.com/webhook/[a-z0-9]{32}/[a-z0-9]{32}`,
+			keywords:   []string{".tines.com/webhook/"},
+		},
+		{
+			// pubnub-publish-key. PubNub publish keys carry the `pub-c-`
+			// prefix and a UUID-shaped body. Leakage allows publishing
+			// to the customer's channels.
+			expression: `pub-c-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`,
+			keywords:   []string{"pub-c-"},
+		},
+		{
+			// pubnub-subscription-key. Pair with the publish key above.
+			expression: `sub-c-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`,
+			keywords:   []string{"sub-c-"},
+		},
+		{
+			// rootly-api-token. Incident-management API tokens carry
+			// the `rootly_` prefix and a 64-char hex body.
+			expression: `rootly_[a-f0-9]{64}`,
+			keywords:   []string{"rootly_"},
+		},
+		{
+			// voiceflow-api-key. Project / dialog manager / WS-API keys
+			// share the `VF.<channel?>.<24 hex>.<16 alnum>` shape.
+			expression: `VF\.(?:(?:DM|WS)\.)?[a-fA-F0-9]{24}\.[A-Za-z0-9]{16}`,
+			keywords:   []string{"VF."},
+		},
+		{
+			// deno-deploy-token. Deno Deploy issues personal (`ddp_`)
+			// and write (`ddw_`) tokens with a fixed 36-char body.
+			expression: `dd[pw]_[A-Za-z0-9]{36}`,
+			keywords:   []string{"ddp_", "ddw_"},
+		},
+		{
+			// ubidots-token. IoT-platform tokens carry the `BBFF-`
+			// prefix and a 30-char alphanumeric body.
+			expression: `BBFF-[A-Za-z0-9]{30}`,
+			keywords:   []string{"BBFF-"},
+		},
+		{
+			// circleci-personal-access-token-v2. The 2024 token format
+			// (`CCIPAT_<22 alnum>_<40 hex>`) replaces the legacy 40-hex
+			// PAT shape; complements the `CCIPRJ_` project-token rule.
+			expression: `CCIPAT_[A-Za-z0-9]{22}_[a-fA-F0-9]{40}`,
+			keywords:   []string{"CCIPAT_"},
+		},
+		{
+			// endorlabs-api-token. Endor Labs supply-chain platform
+			// keys carry the `endr+` prefix and a 16-char body.
+			expression: `endr\+[A-Za-z0-9-]{16}`,
+			keywords:   []string{"endr+"},
+		},
+		{
+			// bitbucket-app-password. Atlassian Bitbucket app passwords
+			// carry the `ATBB` prefix; the body is a base64url-ish run
+			// terminated by an 8-char hex CRC. We cap the body at 200
+			// chars to keep the regex from absorbing trailing text
+			// when the password isn't whitespace-terminated.
+			expression: `ATBB[A-Za-z0-9_=.-]{20,200}`,
+			keywords:   []string{"ATBB"},
+		},
+		{
+			// stripe-payment-intent-client-secret. Client secrets shaped
+			// `pi_<24>_secret_<25>` are returned to the browser to
+			// confirm a PaymentIntent — leakage in logs lets attackers
+			// confirm payments and tamper with the intent.
+			expression: `pi_[A-Za-z0-9]{24}_secret_[A-Za-z0-9]{25}`,
+			keywords:   []string{"_secret_"},
+		},
+		{
+			// trufflehog-enterprise-credentials. The Truffle Security
+			// enterprise platform issues `thog-key-<16 hex>` access keys
+			// alongside `thog-secret-<32 hex>` secrets. Each carries a
+			// distinctive prefix; redact both.
+			expression: `thog-(?:key-[a-f0-9]{16}|secret-[a-f0-9]{32})`,
+			keywords:   []string{"thog-key-", "thog-secret-"},
+		},
+		{
+			// ramp-api-credentials. Ramp (corporate cards) issues a
+			// `ramp_id_<40>` API ID alongside a `ramp_sec_<48>` secret;
+			// both carry distinctive prefixes.
+			expression: `ramp_(?:id_[A-Za-z0-9]{40}|sec_[A-Za-z0-9]{48})`,
+			keywords:   []string{"ramp_id_", "ramp_sec_"},
+		},
+		{
+			// intra42-api-credentials. The 42 school's API issues paired
+			// `s-s4t2(ud|af)-<64 hex>` secrets and `u-s4t2(ud|af)-<64
+			// hex>` IDs; the literal `-s4t2` infix is unique enough that
+			// neither half needs surrounding context.
+			expression: `[su]-s4t2(?:ud|af)-[a-f0-9]{64}`,
+			keywords:   []string{"-s4t2ud-", "-s4t2af-"},
+		},
+		{
+			// flutterwave-live-secret-key. The existing
+			// `flutterwave-public-key` rule only matches `*_TEST-` keys;
+			// production keys use `FLWSECK-<32 hex>-X` (no `_TEST`
+			// segment) and grant live API access.
+			expression: `FLWSECK-[a-f0-9]{32}-X`,
+			keywords:   []string{"FLWSECK-"},
+		},
+		{
+			// slack-workflow-webhook. Workflow Builder webhooks have a
+			// different path shape than the legacy `services/...`
+			// webhooks already covered: `workflows/<T..>/<A..>/<id>/<token>`.
+			expression: `https://hooks\.slack\.com/workflows/T[A-Z0-9]+/A[A-Z0-9]+/[0-9]{17,19}/[A-Za-z0-9]{20,30}`,
+			keywords:   []string{"hooks.slack.com/workflows"},
+		},
+		{
+			// sourcegraph-cody-key. Sourcegraph's Cody assistant keys
+			// (`slk_<64 hex>`) authenticate the IDE / API integrations
+			// against the Cody gateway.
+			expression: `slk_[a-f0-9]{64}`,
+			keywords:   []string{"slk_"},
+		},
 	}
 })
 

@@ -57,7 +57,7 @@ across goroutines.
 
 ## What it detects
 
-The built-in catalogue covers ~220 patterns spanning:
+The built-in catalogue covers ~245 patterns spanning:
 
 - Cloud providers — AWS (incl. STS `ABIA` / context-specific `ACCA`
   prefixes), GCP service accounts, Azure Storage, Azure DevOps,
@@ -71,17 +71,22 @@ The built-in catalogue covers ~220 patterns spanning:
 - LLM / AI providers — OpenAI, Anthropic, DeepSeek, Google (AIza),
   xAI / Grok, Cohere, Groq, Perplexity, Replicate, OpenRouter,
   Hugging Face (user `hf_` + organisation `api_org_`),
-  AssemblyAI, Deepgram.
+  AssemblyAI, Deepgram, NVIDIA NIM (`nvapi-`),
+  LangSmith (`lsv2_pt_` / `lsv2_sk_`), Pinecone (`pcsk_`).
 - Payment processors — Stripe (publishable / secret / restricted /
   webhook), Razorpay, Adyen, Plaid, Square, Braintree.
-- Communication & ops — Slack (legacy, rotating, webhooks),
-  Discord (bot & webhook), Telegram, Twilio, SendGrid, Mailgun,
-  Mailchimp, Sendinblue, Microsoft Teams webhooks.
+- Communication & ops — Slack (legacy, rotating, webhooks,
+  workflow webhooks), Discord (bot & webhook), Telegram, Twilio,
+  SendGrid, Mailgun, Mailchimp, Sendinblue, Microsoft Teams
+  webhooks, PubNub (publish + subscribe), Tines / Zapier webhooks.
 - SaaS & developer tools — Figma, Contentful, HubSpot, LaunchDarkly
   (incl. `sdk-` keys), Doppler (full family), 1Password, Vercel,
   Netlify, Render, Notion, Linear, Trello, ClickUp, Okta, ngrok,
   Cisco Meraki, SettleMint, Fly.io macaroons, Heroku v1/v2,
-  OpenShift `sha256~` tokens.
+  OpenShift `sha256~` tokens, Voiceflow, Deno Deploy, Bitbucket
+  app passwords (`ATBB`), CircleCI v2 (`CCIPAT_`), Endor Labs,
+  Rootly, Sourcegraph Cody, Stripe payment-intent client secrets,
+  Nightfall DLP, Ramp.
 - Infra, web3 & databases — HashiCorp Vault (service / batch /
   recovery), Terraform Cloud, Tailscale, PlanetScale, Supabase,
   MongoDB / Postgres / MySQL / Redis / AMQP connection-string
