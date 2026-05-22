@@ -9,6 +9,9 @@
 // Paths are relative to the scan root. Newlines and carriage returns
 // inside a matched value are collapsed to spaces so each match
 // remains on a single line; this only affects display, not detection.
+// Files are scanned in parallel; matches inside a single file stay
+// in left-to-right order, but cross-file output order is not
+// guaranteed.
 //
 // Usage:
 //
@@ -16,7 +19,8 @@
 //
 // Flags:
 //
-//	-max-size  skip files larger than this many bytes (default 10 MiB).
+//	-max-size    skip files larger than this many bytes (default 10 MiB).
+//	-workers     parallel worker count (default GOMAXPROCS).
 //
 // Exit codes:
 //
@@ -32,7 +36,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/docker/portcullis"
 )
@@ -58,6 +64,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	maxSize := flags.Int64("max-size", defaultMaxSize, "skip files larger than this many bytes (0 disables the limit)")
+	workers := flags.Int("workers", runtime.GOMAXPROCS(0), "parallel worker count")
 
 	if err := flags.Parse(args); err != nil {
 		return exitInvalid
@@ -66,9 +73,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		flags.Usage()
 		return exitInvalid
 	}
+	if *workers < 1 {
+		*workers = 1
+	}
 	root := flags.Arg(0)
 
-	found, err := scan(root, *maxSize, stdout, stderr)
+	found, err := scan(root, *maxSize, *workers, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "portcullis-scan: %v\n", err)
 		return exitInvalid
@@ -81,65 +91,120 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 // scan walks root and writes one line per detected secret. It
 // returns true if at least one secret was found.
-func scan(root string, maxSize int64, out, errOut io.Writer) (bool, error) {
+//
+// Files are processed by `workers` goroutines fed from a channel.
+// Regex matching dominates the cost (>80% of CPU on real
+// repositories) and is single-threaded per call, so giving each core
+// its own file pays for itself trivially. Output for a single file
+// stays contiguous because one file is owned by one worker; the
+// cross-file order is whatever the workers happen to finish in.
+func scan(root string, maxSize int64, workers int, out, errOut io.Writer) (bool, error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return false, err
 	}
 
-	var found bool
-	report := func(path string, data []byte) error {
-		matches := portcullis.Find(string(data))
-		if len(matches) == 0 {
-			return nil
-		}
-		found = true
-		display := path
-		if rel, relErr := filepath.Rel(root, path); relErr == nil && rel != "." {
-			display = rel
-		}
-		for _, m := range matches {
-			line, col := lineCol(data, m.Start)
-			if _, err := fmt.Fprintf(out, "%s:%d:%d: %s\n", display, line, col, sanitizeValue(m.Value)); err != nil {
-				return err
+	// Single-file target: no need to spin up the pool.
+	if !info.IsDir() {
+		return scanFile(root, root, maxSize, out, errOut)
+	}
+
+	paths := make(chan string, workers*4)
+	// One slot per file emits 0..n lines; buffering matches `paths`
+	// so a slow stdout doesn't stall the workers.
+	results := make(chan []byte, workers*4)
+
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for path := range paths {
+				if buf := scanFileBytes(path, root, maxSize, errOut); buf != nil {
+					results <- buf
+				}
 			}
+		})
+	}
+
+	// Walker: push every regular file's path into the queue and
+	// close the queue when done so workers can drain.
+	walkErrCh := make(chan error, 1)
+	go func() {
+		defer close(paths)
+		walkErrCh <- filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, err)
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !d.Type().IsRegular() {
+				return nil
+			}
+			paths <- path
+			return nil
+		})
+	}()
+
+	// Collector: close `results` once all workers are done.
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var found bool
+	for buf := range results {
+		found = true
+		if _, err := out.Write(buf); err != nil {
+			// Drain so producers don't block forever.
+			go func() {
+				for range results {
+				}
+			}()
+			return found, err
 		}
+	}
+	return found, <-walkErrCh
+}
+
+// scanFile is the single-file fast path used when the CLI target is
+// a file rather than a directory.
+func scanFile(path, root string, maxSize int64, out, errOut io.Writer) (bool, error) {
+	buf := scanFileBytes(path, root, maxSize, errOut)
+	if buf == nil {
+		return false, nil
+	}
+	_, err := out.Write(buf)
+	return true, err
+}
+
+// scanFileBytes reads path, runs [portcullis.Find] on its contents,
+// and returns a pre-formatted output chunk (one `path:line:col: value`
+// line per match, all in one allocation). It returns nil if there
+// are no matches or the file was skipped.
+func scanFileBytes(path, root string, maxSize int64, errOut io.Writer) []byte {
+	data, ok, err := readIfSmall(path, maxSize)
+	if err != nil {
+		fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, err)
 		return nil
 	}
-
-	if !info.IsDir() {
-		data, ok, err := readIfSmall(root, maxSize)
-		if err != nil {
-			return false, err
-		}
-		if !ok {
-			return false, nil
-		}
-		return found, report(root, data)
+	if !ok {
+		return nil
 	}
-
-	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, err)
-			if d != nil && d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !d.Type().IsRegular() {
-			return nil
-		}
-		data, ok, readErr := readIfSmall(path, maxSize)
-		if readErr != nil {
-			fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, readErr)
-			return nil
-		}
-		if !ok {
-			return nil
-		}
-		return report(path, data)
-	})
-	return found, walkErr
+	matches := portcullis.Find(string(data))
+	if len(matches) == 0 {
+		return nil
+	}
+	display := path
+	if rel, relErr := filepath.Rel(root, path); relErr == nil && rel != "." {
+		display = rel
+	}
+	var b strings.Builder
+	for _, m := range matches {
+		line, col := lineCol(data, m.Start)
+		fmt.Fprintf(&b, "%s:%d:%d: %s\n", display, line, col, sanitizeValue(m.Value))
+	}
+	return []byte(b.String())
 }
 
 // readIfSmall reads path's contents unless it exceeds maxSize, in
