@@ -4,8 +4,8 @@ sources:
   lint: [go, .golangci.yml]
 
 tasks:
-  # Default: lint + test (the cycle every PR must pass).
-  default:
+  # Run lint and test
+  dev:
     deps: [lint, test]
 
   # Run unit tests, examples, and the linear-scaling guard.
