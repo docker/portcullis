@@ -47,10 +47,14 @@ func Find(text string) []Match {
 		if !r.passes(found, text) {
 			continue
 		}
-		re, secretIdx := r.compile()
-		for _, m := range re.FindAllStringSubmatchIndex(text, -1) {
-			s, e := redactSpan(m, secretIdx)
-			matches = append(matches, Match{Start: s, End: e, Value: text[s:e]})
+		compiled := r.compile()
+		for _, m := range compiled.re.FindAllStringSubmatchIndex(text, -1) {
+			s, e := redactSpan(m, compiled.secretIdx)
+			value := text[s:e]
+			if compiled.validator != nil && !compiled.validator(value) {
+				continue
+			}
+			matches = append(matches, Match{Start: s, End: e, Value: value})
 		}
 	}
 	return dedupOverlapping(matches)
@@ -99,9 +103,18 @@ func Contains(text string) bool {
 		if !r.passes(found, text) {
 			continue
 		}
-		re, _ := r.compile()
-		if re.MatchString(text) {
-			return true
+		compiled := r.compile()
+		if compiled.validator == nil {
+			if compiled.re.MatchString(text) {
+				return true
+			}
+			continue
+		}
+		for _, m := range compiled.re.FindAllStringSubmatchIndex(text, -1) {
+			s, e := redactSpan(m, compiled.secretIdx)
+			if compiled.validator(text[s:e]) {
+				return true
+			}
 		}
 	}
 	return false
@@ -169,21 +182,21 @@ func Redact(text string) string {
 // indices to slice out the (?P<secret>…) subgroup while keeping the
 // rest of the match intact.
 func redactWithRule(r *compiledRule, text string) string {
-	re, secretIdx := r.compile()
+	compiled := r.compile()
 
 	// Probe for the first match before reaching for FindAll: that
 	// avoids allocating the outer [][]int wrapper when there is at
 	// most one hit (the overwhelmingly common case in real inputs).
-	m := re.FindStringSubmatchIndex(text)
+	m := nextValidMatch(compiled, text)
 	if m == nil {
 		return text
 	}
-	start, end := redactSpan(m, secretIdx)
+	start, end := redactSpan(m, compiled.secretIdx)
 
 	// Fast path: a single match collapses to a 3-way string concat
 	// that allocates exactly the result buffer once. Probe the
 	// remainder for a second match before committing to it.
-	rest := re.FindStringSubmatchIndex(text[end:])
+	rest := nextValidMatch(compiled, text[end:])
 	if rest == nil {
 		return text[:start] + Marker + text[end:]
 	}
@@ -195,8 +208,8 @@ func redactWithRule(r *compiledRule, text string) string {
 	b.WriteString(text[:start])
 	b.WriteString(Marker)
 	cursor := end
-	for m := rest; m != nil; m = re.FindStringSubmatchIndex(text[cursor:]) {
-		s, e := redactSpan(m, secretIdx)
+	for m := rest; m != nil; m = nextValidMatch(compiled, text[cursor:]) {
+		s, e := redactSpan(m, compiled.secretIdx)
 		s += cursor
 		e += cursor
 		b.WriteString(text[cursor:s])
@@ -205,6 +218,28 @@ func redactWithRule(r *compiledRule, text string) string {
 	}
 	b.WriteString(text[cursor:])
 	return b.String()
+}
+
+// nextValidMatch returns the first regex match whose secret span passes
+// the optional rule validator.
+func nextValidMatch(compiled compiledMatch, text string) []int {
+	for offset := 0; offset < len(text); {
+		m := compiled.re.FindStringSubmatchIndex(text[offset:])
+		if m == nil {
+			return nil
+		}
+		for i := range m {
+			if m[i] >= 0 {
+				m[i] += offset
+			}
+		}
+		s, e := redactSpan(m, compiled.secretIdx)
+		if compiled.validator == nil || compiled.validator(text[s:e]) {
+			return m
+		}
+		offset = max(e, offset+1)
+	}
+	return nil
 }
 
 // redactSpan returns the [start, end) byte offsets that should be

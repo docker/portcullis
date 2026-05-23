@@ -38,6 +38,7 @@ type rule struct {
 	expression    string
 	keywords      []string
 	caseSensitive bool
+	validator     func(string) bool
 }
 
 // asSecretGroup wraps a `?P<secret>…` fragment in a plain group so
@@ -109,26 +110,31 @@ var rules = sync.OnceValue(func() []rule {
 			// github-pat
 			expression: asSecretGroup(`?P<secret>ghp_[0-9a-zA-Z]{36}`),
 			keywords:   []string{"ghp_"},
+			validator:  validGitHubChecksum,
 		},
 		{
 			// github-oauth
 			expression: asSecretGroup(`?P<secret>gho_[0-9a-zA-Z]{36}`),
 			keywords:   []string{"gho_"},
+			validator:  validGitHubChecksum,
 		},
 		{
 			// github-app-token
 			expression: asSecretGroup(`?P<secret>(ghu|ghs)_[0-9a-zA-Z]{36}`),
 			keywords:   []string{"ghu_", "ghs_"},
+			validator:  validGitHubChecksum,
 		},
 		{
 			// github-refresh-token
-			expression: asSecretGroup(`?P<secret>ghr_[0-9a-zA-Z]{76}`),
+			expression: asSecretGroup(`?P<secret>ghr_[0-9a-zA-Z]{36}`),
 			keywords:   []string{"ghr_"},
+			validator:  validGitHubChecksum,
 		},
 		{
 			// github-fine-grained-pat
-			expression: `github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}`,
+			expression: asSecretGroup(`?P<secret>github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}`),
 			keywords:   []string{"github_pat_"},
+			validator:  validGitHubChecksum,
 		},
 		{
 			// gitlab-pat
@@ -1887,11 +1893,17 @@ var rules = sync.OnceValue(func() []rule {
 // already matched. This avoids running the regex on every file
 // that happens to contain a folded form of a CS keyword (e.g. the
 // English bigrams `mt`/`nd`/`od` for Discord, `sk` for Twilio).
+type compiledMatch struct {
+	re        *regexp.Regexp
+	secretIdx int
+	validator func(string) bool
+}
+
 type compiledRule struct {
 	kwBits        kwMask
 	caseSensitive bool
 	csKW          []string
-	compile       func() (*regexp.Regexp, int) // memoised; returns (re, secretIdx)
+	compile       func() compiledMatch // memoised
 }
 
 // passes returns true when the rule should run its regex against
@@ -1952,13 +1964,14 @@ var compiledRuleSet = sync.OnceValue(func() *ruleSet {
 			bits.set(kwIdx[strings.ToLower(k)])
 		}
 		expr := r.expression // bind for the closure below
+		validator := r.validator
 		rules[i] = compiledRule{
 			kwBits:        bits,
 			caseSensitive: r.caseSensitive,
 			csKW:          r.keywords,
-			compile: sync.OnceValues(func() (*regexp.Regexp, int) {
+			compile: sync.OnceValue(func() compiledMatch {
 				re := regexp.MustCompile(expr)
-				return re, re.SubexpIndex("secret")
+				return compiledMatch{re: re, secretIdx: re.SubexpIndex("secret"), validator: validator}
 			}),
 		}
 	}

@@ -21,7 +21,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		name string
 		text string
 	}{
-		{"github_pat", "ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"},
+		{"github_pat", "ghp_" + strings.Repeat("A", 30) + "1yBYBE"},
 		{"docker_pat", "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"},
 		{"docker_oat", "dckr_oat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"},
 		// Patterns added on top of the upstream catalogue. Each value
@@ -416,7 +416,7 @@ func TestContainsIgnoresHarmlessText(t *testing.T) {
 func TestRedactReplacesSecretSpan(t *testing.T) {
 	t.Parallel()
 
-	const ghp = "ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"
+	const ghp = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE"
 	in := "Run this with token=" + ghp + " and you're set"
 
 	out := portcullis.Redact(in)
@@ -462,8 +462,8 @@ func TestRedactPreservesNonMatchingText(t *testing.T) {
 func TestRedactHandlesMultipleSecretsInOneInput(t *testing.T) {
 	t.Parallel()
 
-	const a = "ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"
-	const b = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	const a = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE"
+	const b = "ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB1794Fj"
 	in := "first " + a + " and second " + b + " end"
 
 	out := portcullis.Redact(in)
@@ -515,7 +515,7 @@ func TestRedactDetectsSecretsAcrossWordBoundaries(t *testing.T) {
 	// the verbatim token never appears on a single source line; that
 	// keeps secret-scanners (including ours) happy on the test file
 	// itself while still exercising the real ruleset.
-	ghp := "ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"
+	ghp := "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE"
 	awsAccessKey := "AKIA" + "IOSFODNN7EXAMPLE"
 	dockerPAT := "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
@@ -575,7 +575,7 @@ func TestFindDeduplicatesOverlappingMatches(t *testing.T) {
 func TestFindKeepsDistinctSecrets(t *testing.T) {
 	t.Parallel()
 
-	a := "ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"
+	a := "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE"
 	b := "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	in := "first " + a + " then " + b
 
@@ -584,6 +584,32 @@ func TestFindKeepsDistinctSecrets(t *testing.T) {
 	assert.Equal(t, a, matches[0].Value)
 	assert.Equal(t, b, matches[1].Value)
 	assert.Less(t, matches[0].Start, matches[1].Start, "matches must be in left-to-right order")
+}
+
+func TestGitHubTokensRequireChecksum(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"ghp_" + strings.Repeat("a", 36),
+		"gho_" + strings.Repeat("a", 36),
+		"ghu_" + strings.Repeat("a", 36),
+		"ghs_" + strings.Repeat("a", 36),
+		"ghr_" + strings.Repeat("a", 36),
+		"github_pat_" + strings.Repeat("a", 22) + "_" + strings.Repeat("b", 59),
+	}
+	for _, token := range cases {
+		assert.Falsef(t, portcullis.Contains(token), "invalid checksum must not match: %q", token)
+		assert.Equalf(t, token, portcullis.Redact(token), "invalid checksum must pass through: %q", token)
+	}
+}
+
+func TestGitHubPlaceholderFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	in := "ghp_${OPENFGA_DATASTORE_PASSWORD}"
+
+	assert.False(t, portcullis.Contains(in))
+	assert.Equal(t, in, portcullis.Redact(in))
 }
 
 // TestConnectionStringRulesIgnoreTemplatePlaceholders pins the
@@ -680,7 +706,7 @@ func TestCaseSensitiveRulesIgnoreLowercaseLookalikes(t *testing.T) {
 func TestFindBytesMatchesFind(t *testing.T) {
 	t.Parallel()
 
-	in := "prefix ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD" + " mid dckr_pat_" +
+	in := "prefix ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE" + " mid dckr_pat_" +
 		"AAAAAAAAAAAAAAAAAAAAAAAAAAA" + " suffix"
 
 	assert.Equal(t, portcullis.Find(in), portcullis.FindBytes([]byte(in)))
@@ -704,7 +730,7 @@ func TestContainsBytesMatchesContains(t *testing.T) {
 	cases := []string{
 		"",
 		"hello world",
-		"ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD",
+		"ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE",
 	}
 	for _, in := range cases {
 		assert.Equalf(t, portcullis.Contains(in), portcullis.ContainsBytes([]byte(in)),

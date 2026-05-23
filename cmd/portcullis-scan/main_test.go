@@ -13,7 +13,7 @@ import (
 
 // Token shaped like a real GitHub PAT. Split across concatenation so
 // the literal value never appears on a single source line.
-const githubPAT = "ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"
+const githubPAT = "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE"
 
 func TestRunPrintsEachSecretFound(t *testing.T) {
 	t.Parallel()

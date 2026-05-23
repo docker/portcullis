@@ -7,7 +7,7 @@ import (
 )
 
 func ExampleRedact() {
-	log := "Run this with token=ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD please."
+	log := "Run this with token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE please."
 
 	fmt.Println(portcullis.Redact(log))
 	// Output:
@@ -25,8 +25,8 @@ func ExampleRedact_connectionString() {
 }
 
 func ExampleRedact_multipleSecrets() {
-	in := "first ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD " +
-		"and second ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA end"
+	in := "first ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE " +
+		"and second ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB1794Fj end"
 
 	fmt.Println(portcullis.Redact(in))
 	// Output:
@@ -35,20 +35,20 @@ func ExampleRedact_multipleSecrets() {
 
 func ExampleContains() {
 	fmt.Println(portcullis.Contains("hello world"))
-	fmt.Println(portcullis.Contains("token=ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD"))
+	fmt.Println(portcullis.Contains("token=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE"))
 	// Output:
 	// false
 	// true
 }
 
 func ExampleFind() {
-	in := "first ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD then " +
+	in := "first ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE then " +
 		"postgresql://app:hunter2supersecret@db.internal/orders"
 
 	for _, m := range portcullis.Find(in) {
 		fmt.Printf("%d-%d: %s\n", m.Start, m.End, m.Value)
 	}
 	// Output:
-	// 6-46: ghp_cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD
+	// 6-46: ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE
 	// 69-87: hunter2supersecret
 }

@@ -123,7 +123,8 @@ func TestEveryRuleCompiles(t *testing.T) {
 			"rule %d has no keywords — its regex would never run", i)
 		require.NotPanicsf(t, func() { r.compile() },
 			"rule %d's regex must compile", i)
-		re, _ := r.compile()
+		compiled := r.compile()
+		re := compiled.re
 		require.NotNilf(t, re, "rule %d compile returned nil regexp", i)
 	}
 }
