@@ -586,6 +586,46 @@ func TestFindKeepsDistinctSecrets(t *testing.T) {
 	assert.Less(t, matches[0].Start, matches[1].Start, "matches must be in left-to-right order")
 }
 
+// TestConnectionStringRulesIgnoreTemplatePlaceholders pins the
+// no-fire behaviour of the URI password rules (mongodb / postgres /
+// mysql / redis / rediss / amqp / amqps) when the password segment
+// is an unresolved templating placeholder — `${VAR}`, `{{ .Pass }}`,
+// `<password>`, `%PASS%`, or a bare `$VAR` reference. CI / Helm /
+// Kustomize emit those into committed config files all the time;
+// they aren't real passwords and shouldn't be flagged.
+func TestConnectionStringRulesIgnoreTemplatePlaceholders(t *testing.T) {
+	t.Parallel()
+
+	schemes := []string{
+		"postgres://user:",
+		"postgresql://user:",
+		"mongodb://user:",
+		"mongodb+srv://user:",
+		"mysql://user:",
+		"redis://user:",
+		"rediss://user:",
+		"amqp://user:",
+		"amqps://user:",
+	}
+	placeholders := []string{
+		"${PASSWORD}",
+		"${OPENFGA_DATASTORE_PASSWORD}",
+		"{{ .Values.password }}",
+		"<password>",
+		"%PASS%",
+		"$PASSWORD",
+	}
+	for _, scheme := range schemes {
+		for _, ph := range placeholders {
+			in := scheme + ph + "@host.example.com/db"
+			assert.Falsef(t, portcullis.Contains(in),
+				"templated placeholder must not match: %q", in)
+			assert.Equalf(t, in, portcullis.Redact(in),
+				"templated placeholder must pass through unchanged: %q", in)
+		}
+	}
+}
+
 // TestCaseSensitiveRulesIgnoreLowercaseLookalikes pins the AC
 // post-filter that makes the case-sensitive rule flag work. Each
 // case below contains the *case-folded* version of a CS rule's

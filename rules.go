@@ -814,14 +814,22 @@ var rules = sync.OnceValue(func() []rule {
 			// scrub the password span. The 200-char upper bound stops
 			// the regex from consuming arbitrary trailing content if a
 			// connection string is missing the `@` terminator.
-			expression: `mongodb(?:\+srv)?://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
+			//
+			// The leading character class excludes `${…}`, `{{…}}`,
+			// `<…>`, `%…%` and bare `$VAR` template references that
+			// CI / Helm / Kustomize emit verbatim into committed config
+			// files — they aren't real passwords, just placeholders.
+			expression: `mongodb(?:\+srv)?://[^\s:/?#@]+:(?P<secret>[^\s@${<%][^\s@]{0,199})@`,
 			keywords:   []string{"mongodb://", "mongodb+srv://"},
 		},
 		{
-			// postgres-connection-string. Same shape as the MongoDB rule:
-			// only the URI password is redacted so the surrounding
-			// `postgresql://user@host/db` framing stays readable.
-			expression: `postgres(?:ql)?://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
+			// postgres-connection-string. Same design as the MongoDB
+			// rule: only the URI password is redacted so the surrounding
+			// `postgresql://user@host/db` framing stays readable. The
+			// password's first character must be non-template (see
+			// mongodb-connection-string) so unresolved `${PASSWORD}`
+			// placeholders in templated YAML / Helm values don't fire.
+			expression: `postgres(?:ql)?://[^\s:/?#@]+:(?P<secret>[^\s@${<%][^\s@]{0,199})@`,
 			keywords:   []string{"postgres://", "postgresql://"},
 		},
 		{
@@ -1624,8 +1632,10 @@ var rules = sync.OnceValue(func() []rule {
 			// mysql-connection-string. Same design as the existing
 			// MongoDB / Postgres rules: only the URI password is
 			// redacted so the surrounding `mysql://user@host/db`
-			// framing stays readable.
-			expression: `mysql://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
+			// framing stays readable. Templated `${PASSWORD}` /
+			// `{{ .Pass }}` / `<password>` placeholders are excluded
+			// via the leading-char class.
+			expression: `mysql://[^\s:/?#@]+:(?P<secret>[^\s@${<%][^\s@]{0,199})@`,
 			keywords:   []string{"mysql://"},
 		},
 		{
@@ -1633,16 +1643,18 @@ var rules = sync.OnceValue(func() []rule {
 			// `redis://user:password@host` (ACL) and the older
 			// `redis://:password@host` (no username) forms. The
 			// TLS variant uses the `rediss://` scheme. Only the
-			// password span is redacted.
-			expression: `rediss?://[^\s:/?#@]*:(?P<secret>[^\s@]{1,200})@`,
+			// password span is redacted; templated placeholders are
+			// excluded via the leading-char class.
+			expression: `rediss?://[^\s:/?#@]*:(?P<secret>[^\s@${<%][^\s@]{0,199})@`,
 			keywords:   []string{"redis://", "rediss://"},
 		},
 		{
 			// amqp-connection-string. RabbitMQ and other AMQP
 			// brokers accept `amqp://user:password@host` URIs;
 			// the TLS variant uses `amqps://`. Only the password
-			// span is redacted.
-			expression: `amqps?://[^\s:/?#@]+:(?P<secret>[^\s@]{1,200})@`,
+			// span is redacted; templated placeholders are excluded
+			// via the leading-char class.
+			expression: `amqps?://[^\s:/?#@]+:(?P<secret>[^\s@${<%][^\s@]{0,199})@`,
 			keywords:   []string{"amqp://", "amqps://"},
 		},
 		{
