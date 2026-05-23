@@ -75,6 +75,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"netlify_pat", "nfp_" + strings.Repeat("a", 40)},
 		{"asana_pat", "1/" + strings.Repeat("1", 16) + ":" + strings.Repeat("a", 32)},
 		{"cloudflare_origin_ca_key", "v1.0-" + strings.Repeat("a", 32) + "-" + strings.Repeat("b", 146)},
+		{"age_secret_key", "AGE-SECRET-KEY-1" + strings.Repeat("Q", 52) + "8H00W3"},
 		// Third batch of additions — vendor-prefixed credentials
 		// confirmed against gitleaks default rules and vendor docs.
 		{"onepassword_service_account", "ops_eyJ" + strings.Repeat("a", 260)},
@@ -608,6 +609,15 @@ func TestGitHubPlaceholderFalsePositive(t *testing.T) {
 	t.Parallel()
 
 	in := "ghp_${OPENFGA_DATASTORE_PASSWORD}"
+
+	assert.False(t, portcullis.Contains(in))
+	assert.Equal(t, in, portcullis.Redact(in))
+}
+
+func TestAgeSecretKeysRequireValidBech32Checksum(t *testing.T) {
+	t.Parallel()
+
+	in := "AGE-SECRET-KEY-1" + strings.Repeat("Q", 58)
 
 	assert.False(t, portcullis.Contains(in))
 	assert.Equal(t, in, portcullis.Redact(in))

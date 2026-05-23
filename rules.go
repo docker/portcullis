@@ -191,10 +191,13 @@ var rules = sync.OnceValue(func() []rule {
 			caseSensitive: true,
 		},
 		{
-			// age-secret-key
+			// age-secret-key. Age uses Bech32 with a checksum; the
+			// validator decodes the key and requires the 32-byte X25519
+			// secret payload so typo-shaped strings do not match.
 			expression:    `AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}`,
 			keywords:      []string{"AGE-SECRET-KEY-1"},
 			caseSensitive: true,
+			validator:     validAgeSecretKey,
 		},
 		{
 			// facebook-token

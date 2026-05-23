@@ -11,6 +11,7 @@ const (
 	githubChecksumLen = 6
 	base62Alphabet    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	awsKeyIDAlphabet  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+	bech32Alphabet    = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 )
 
 func validGitHubChecksum(token string) bool {
@@ -50,6 +51,94 @@ func decodeJSON(segment string, v any) bool {
 		return false
 	}
 	return json.Unmarshal(decoded, v) == nil
+}
+
+func validAgeSecretKey(token string) bool {
+	if strings.ToUpper(token) != token || !strings.HasPrefix(token, "AGE-SECRET-KEY-1") {
+		return false
+	}
+	data, ok := bech32Decode(strings.ToLower(token), "age-secret-key-")
+	if !ok {
+		return false
+	}
+	decoded, ok := convertBits(data, 5, 8, false)
+	return ok && len(decoded) == 32
+}
+
+func bech32Decode(s, expectedHRP string) ([]byte, bool) {
+	pos := strings.LastIndexByte(s, '1')
+	if pos < 1 || pos+7 > len(s) || s[:pos] != expectedHRP {
+		return nil, false
+	}
+	data := make([]byte, len(s)-pos-1)
+	for i, c := range s[pos+1:] {
+		idx := strings.IndexRune(bech32Alphabet, c)
+		if idx < 0 {
+			return nil, false
+		}
+		data[i] = byte(idx)
+	}
+	if !validBech32Checksum(s[:pos], data) {
+		return nil, false
+	}
+	return data[:len(data)-6], true
+}
+
+func validBech32Checksum(hrp string, data []byte) bool {
+	return bech32Polymod(append(bech32HRPExpand(hrp), data...)) == 1
+}
+
+func bech32HRPExpand(hrp string) []byte {
+	expanded := make([]byte, 0, len(hrp)*2+1)
+	for _, c := range hrp {
+		expanded = append(expanded, byte(c>>5))
+	}
+	expanded = append(expanded, 0)
+	for _, c := range hrp {
+		expanded = append(expanded, byte(c&31))
+	}
+	return expanded
+}
+
+func bech32Polymod(values []byte) uint32 {
+	chk := uint32(1)
+	for _, v := range values {
+		top := chk >> 25
+		chk = (chk&0x1ffffff)<<5 ^ uint32(v)
+		for i, generator := range []uint32{0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3} {
+			if (top>>i)&1 != 0 {
+				chk ^= generator
+			}
+		}
+	}
+	return chk
+}
+
+func convertBits(data []byte, from, to uint, pad bool) ([]byte, bool) {
+	var acc, bits uint
+	maxv := uint((1 << to) - 1)
+	maxAcc := uint((1 << (from + to - 1)) - 1)
+	var ret []byte
+	for _, value := range data {
+		v := uint(value)
+		if v>>from != 0 {
+			return nil, false
+		}
+		acc = ((acc << from) | v) & maxAcc
+		bits += from
+		for bits >= to {
+			bits -= to
+			ret = append(ret, byte((acc>>bits)&maxv))
+		}
+	}
+	if pad {
+		if bits > 0 {
+			ret = append(ret, byte((acc<<(to-bits))&maxv))
+		}
+	} else if bits >= from || ((acc<<(to-bits))&maxv) != 0 {
+		return nil, false
+	}
+	return ret, true
 }
 
 func validCloudflareAPIKey(token string) bool {

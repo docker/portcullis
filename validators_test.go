@@ -58,6 +58,19 @@ func TestInvalidJWT(t *testing.T) {
 	assert.False(t, validJWT("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."))
 }
 
+func TestValidAgeSecretKey(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validAgeSecretKey("AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ8H00W3"))
+}
+
+func TestInvalidAgeSecretKey(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, validAgeSecretKey("AGE-SECRET-KEY-1"+strings.Repeat("Q", 58)))
+	assert.False(t, validAgeSecretKey("age-secret-key-1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq8h00w3"))
+}
+
 func TestValidCloudflareAPIKey(t *testing.T) {
 	t.Parallel()
 
