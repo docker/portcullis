@@ -122,6 +122,45 @@ func TestRunSanitisesMultilineSecrets(t *testing.T) {
 	assert.NotContains(t, strings.TrimSuffix(out, "\n"), "\n")
 }
 
+func TestRunSkipsBinaryFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "data.bin"),
+		append([]byte{0x00, 0x01, 0x02}, []byte(githubPAT)...),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "good.txt"),
+		[]byte(githubPAT),
+		0o644,
+	))
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{root}, &stdout, &stderr)
+
+	assert.Equal(t, exitFound, code)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "good.txt")
+	assert.NotContains(t, stdout.String(), "data.bin")
+}
+
+func TestRunBinaryFlagOptsIn(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	bin := filepath.Join(root, "data.bin")
+	require.NoError(t, os.WriteFile(bin, append([]byte{0x00, 0x01, 0x02}, []byte(githubPAT)...), 0o644))
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"-binary", root}, &stdout, &stderr)
+
+	assert.Equal(t, exitFound, code)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "data.bin")
+}
+
 // TestRunOutputIsDeterministic pins the contract that two runs over
 // the same tree must produce byte-identical output, regardless of
 // worker count or scheduling. The collector reorders worker results

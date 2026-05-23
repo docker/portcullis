@@ -21,6 +21,9 @@
 //
 //	-max-size    skip files larger than this many bytes (default 10 MiB).
 //	-workers     parallel worker count (default GOMAXPROCS).
+//	-binary      also scan binary files (default: skipped, like ripgrep).
+//	             A file is considered binary when its first 8 KiB
+//	             contains a NUL byte.
 //	-ignore      glob pattern to skip; repeatable. Patterns containing
 //	             '/' are anchored to the scan root, others match
 //	             basenames. '**' matches any run of characters,
@@ -36,6 +39,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -55,6 +59,10 @@ const (
 	exitInvalid = 2
 
 	defaultMaxSize int64 = 10 << 20 // 10 MiB
+
+	// binarySniffSize is the prefix examined to decide whether a
+	// file is binary. 8 KiB is what git / ripgrep use.
+	binarySniffSize = 8 << 10
 )
 
 func main() {
@@ -71,6 +79,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	maxSize := flags.Int64("max-size", defaultMaxSize, "skip files larger than this many bytes (0 disables the limit)")
 	workers := flags.Int("workers", runtime.GOMAXPROCS(0), "parallel worker count")
+	scanBinary := flags.Bool("binary", false, "also scan binary files (NUL byte in first 8 KiB)")
 	var ignore stringSliceFlag
 	flags.Var(&ignore, "ignore", "glob pattern to skip (repeatable); e.g. '*_test.go' or 'vendor/**'")
 
@@ -92,7 +101,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitInvalid
 	}
 
-	found, err := scan(root, *maxSize, *workers, matcher, stdout, stderr)
+	found, err := scan(root, *maxSize, *workers, *scanBinary, matcher, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "portcullis-scan: %v\n", err)
 		return exitInvalid
@@ -113,7 +122,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 // walker's lexical order: the walker tags each file with a sequence
 // number, workers preserve it, and the collector reorders results
 // before writing so the output is deterministic across runs.
-func scan(root string, maxSize int64, workers int, ignore *ignoreMatcher, out, errOut io.Writer) (bool, error) {
+func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *ignoreMatcher, out, errOut io.Writer) (bool, error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return false, err
@@ -121,7 +130,7 @@ func scan(root string, maxSize int64, workers int, ignore *ignoreMatcher, out, e
 
 	// Single-file target: no need to spin up the pool.
 	if !info.IsDir() {
-		return scanFile(root, root, maxSize, out, errOut)
+		return scanFile(root, root, maxSize, scanBinary, out, errOut)
 	}
 
 	type job struct {
@@ -140,7 +149,7 @@ func scan(root string, maxSize int64, workers int, ignore *ignoreMatcher, out, e
 	for range workers {
 		wg.Go(func() {
 			for j := range jobs {
-				results <- result{seq: j.seq, buf: scanFileBytes(j.path, root, maxSize, errOut)}
+				results <- result{seq: j.seq, buf: scanFileBytes(j.path, root, maxSize, scanBinary, errOut)}
 			}
 		})
 	}
@@ -227,8 +236,8 @@ func scan(root string, maxSize int64, workers int, ignore *ignoreMatcher, out, e
 
 // scanFile is the single-file fast path used when the CLI target is
 // a file rather than a directory.
-func scanFile(path, root string, maxSize int64, out, errOut io.Writer) (bool, error) {
-	buf := scanFileBytes(path, root, maxSize, errOut)
+func scanFile(path, root string, maxSize int64, scanBinary bool, out, errOut io.Writer) (bool, error) {
+	buf := scanFileBytes(path, root, maxSize, scanBinary, errOut)
 	if buf == nil {
 		return false, nil
 	}
@@ -240,8 +249,8 @@ func scanFile(path, root string, maxSize int64, out, errOut io.Writer) (bool, er
 // and returns a pre-formatted output chunk (one `path:line:col: value`
 // line per match, all in one allocation). It returns nil if there
 // are no matches or the file was skipped.
-func scanFileBytes(path, root string, maxSize int64, errOut io.Writer) []byte {
-	data, ok, err := readIfSmall(path, maxSize)
+func scanFileBytes(path, root string, maxSize int64, scanBinary bool, errOut io.Writer) []byte {
+	data, ok, err := readIfScannable(path, maxSize, scanBinary)
 	if err != nil {
 		fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, err)
 		return nil
@@ -265,9 +274,13 @@ func scanFileBytes(path, root string, maxSize int64, errOut io.Writer) []byte {
 	return []byte(b.String())
 }
 
-// readIfSmall reads path's contents unless it exceeds maxSize, in
-// which case ok is false and data is nil.
-func readIfSmall(path string, maxSize int64) (data []byte, ok bool, err error) {
+// readIfScannable reads path's contents, skipping it if it exceeds
+// maxSize or (unless scanBinary is true) looks binary. Binary
+// detection is the standard heuristic: read the first 8 KiB and
+// look for a NUL byte. Aborting the read at that point — instead of
+// scanning a whole git packfile or compiled binary through every
+// regex — is the dominant speed-up on real-world trees.
+func readIfScannable(path string, maxSize int64, scanBinary bool) (data []byte, ok bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, false, err
@@ -278,14 +291,38 @@ func readIfSmall(path string, maxSize int64) (data []byte, ok bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
-	if maxSize > 0 && st.Size() > maxSize {
+	size := st.Size()
+	if maxSize > 0 && size > maxSize {
 		return nil, false, nil
 	}
-	data, err = io.ReadAll(f)
+
+	if scanBinary {
+		data, err = io.ReadAll(f)
+		if err != nil {
+			return nil, false, err
+		}
+		return data, true, nil
+	}
+
+	// Sniff first 8 KiB for a NUL byte before committing to read
+	// the rest. On large binaries (git packs, archives, prebuilt
+	// executables) this avoids both the IO and the regex pass.
+	sniffN := min(int64(binarySniffSize), size)
+	sniff := make([]byte, sniffN)
+	if _, err = io.ReadFull(f, sniff); err != nil {
+		return nil, false, err
+	}
+	if bytes.IndexByte(sniff, 0) >= 0 {
+		return nil, false, nil
+	}
+	if size == sniffN {
+		return sniff, true, nil
+	}
+	rest, err := io.ReadAll(f)
 	if err != nil {
 		return nil, false, err
 	}
-	return data, true, nil
+	return append(sniff, rest...), true, nil
 }
 
 // lineCol returns the 1-based line and column for offset within data.
