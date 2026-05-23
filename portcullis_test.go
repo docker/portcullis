@@ -22,6 +22,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		text string
 	}{
 		{"github_pat", "ghp_" + strings.Repeat("A", 30) + "1yBYBE"},
+		{"aws_access_key_id", "AKIA" + "RZPUZDIKQEXAMPLE"},
 		{"docker_pat", "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"},
 		{"docker_oat", "dckr_oat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"},
 		// Patterns added on top of the upstream catalogue. Each value
@@ -516,7 +517,7 @@ func TestRedactDetectsSecretsAcrossWordBoundaries(t *testing.T) {
 	// keeps secret-scanners (including ours) happy on the test file
 	// itself while still exercising the real ruleset.
 	ghp := "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE"
-	awsAccessKey := "AKIA" + "IOSFODNN7EXAMPLE"
+	awsAccessKey := "AKIA" + "RZPUZDIKQEXAMPLE"
 	dockerPAT := "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 	cases := []struct {
@@ -610,6 +611,14 @@ func TestGitHubPlaceholderFalsePositive(t *testing.T) {
 
 	assert.False(t, portcullis.Contains(in))
 	assert.Equal(t, in, portcullis.Redact(in))
+}
+
+func TestAWSAccessKeyIDsMustEncodePlausibleAccountID(t *testing.T) {
+	t.Parallel()
+
+	invalid := "AKIAIOSFODNN7EXAMPLE"
+	assert.False(t, portcullis.Contains(invalid))
+	assert.Equal(t, invalid, portcullis.Redact(invalid))
 }
 
 // TestConnectionStringRulesIgnoreTemplatePlaceholders pins the

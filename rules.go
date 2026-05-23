@@ -96,10 +96,13 @@ var rules = sync.OnceValue(func() []rule {
 			// default rule, minus the four-letter prefixes (`ABIA`,
 			// `ACCA`) that proved to be too generic in practice — they
 			// fire on random base64 runs in minified bundles, certificate
-			// data, and crypto test vectors.
+			// data, and crypto test vectors. The validator decodes the
+			// embedded 12-digit AWS account ID for modern access-key IDs,
+			// rejecting strings whose base32 body cannot encode one.
 			expression:    asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16})` + quote),
 			keywords:      []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA"},
 			caseSensitive: true,
+			validator:     validAWSAccessKeyID,
 		},
 		{
 			// aws-secret-access-key

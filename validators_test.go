@@ -31,6 +31,29 @@ func TestInvalidGitHubChecksum(t *testing.T) {
 	assert.False(t, validGitHubChecksum("github_pat_"+strings.Repeat("a", 22)+"_"+strings.Repeat("b", 59)))
 }
 
+func TestValidAWSAccessKeyID(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validAWSAccessKeyID("AKIARZPUZDIKQEXAMPLE"))
+	assert.True(t, validAWSAccessKeyID("ASIARZPUZDIKREXAMPLE"))
+}
+
+func TestInvalidAWSAccessKeyID(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, validAWSAccessKeyID("AKIAIOSFODNN7EXAMPLE"))
+	assert.False(t, validAWSAccessKeyID("AKIAABCDEFGHIJKLMNOP"))
+	assert.False(t, validAWSAccessKeyID("AKIA7ZPUZDIKREXAMPLE"))
+}
+
+func TestBase32Index(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, int64(0), base32Index("AAAAAAAA"))
+	assert.Equal(t, int64(1), base32Index("AAAAAAAB"))
+	assert.Equal(t, int64(-1), base32Index("AAAAAAA0"))
+}
+
 func TestBase62CRC32(t *testing.T) {
 	t.Parallel()
 
