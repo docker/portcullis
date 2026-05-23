@@ -743,11 +743,14 @@ var rules = sync.OnceValue(func() []rule {
 		{
 			// discord-webhook-url. The URL itself is a bearer credential:
 			// anyone holding it can post arbitrary content to the channel.
-			// `discord.com/api/webhooks/<channel id>/<token>` (and the
+			// `discord.com/api/webhooks/<webhook id>/<token>` (and the
 			// `discordapp.com` legacy alias plus the `canary.`/`ptb.`
-			// release-channel hosts) is the documented shape.
+			// release-channel hosts) is the documented shape. The validator
+			// rejects webhook IDs whose Discord snowflake timestamp is
+			// impossible.
 			expression: `https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+`,
 			keywords:   []string{"discord.com/api/webhooks", "discordapp.com/api/webhooks"},
+			validator:  validDiscordWebhookURL,
 		},
 		{
 			// telegram-bot-token. BotFather issues tokens shaped

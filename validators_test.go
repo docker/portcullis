@@ -71,6 +71,20 @@ func TestInvalidAgeSecretKey(t *testing.T) {
 	assert.False(t, validAgeSecretKey("age-secret-key-1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq8h00w3"))
 }
 
+func TestValidDiscordWebhookURL(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validDiscordWebhookURL("https://discord.com/api/webhooks/1174109840998400000/"+strings.Repeat("a", 60)))
+	assert.True(t, validDiscordWebhookURL("https://discordapp.com/api/webhooks/1174109840998400000/"+strings.Repeat("a", 60)))
+}
+
+func TestInvalidDiscordWebhookURL(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, validDiscordWebhookURL("https://discord.com/api/webhooks/18446744073709551615/"+strings.Repeat("a", 60)))
+	assert.False(t, validDiscordWebhookURL("https://discord.com/api/webhooks/not-a-number/"+strings.Repeat("a", 60)))
+}
+
 func TestValidCloudflareAPIKey(t *testing.T) {
 	t.Parallel()
 

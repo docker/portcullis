@@ -4,7 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"hash/crc32"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -139,6 +142,24 @@ func convertBits(data []byte, from, to uint, pad bool) ([]byte, bool) {
 		return nil, false
 	}
 	return ret, true
+}
+
+func validDiscordWebhookURL(token string) bool {
+	u, err := url.Parse(token)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "api" || parts[1] != "webhooks" || parts[3] == "" {
+		return false
+	}
+	id, err := strconv.ParseUint(parts[2], 10, 64)
+	if err != nil {
+		return false
+	}
+	timestamp := time.UnixMilli(int64((id >> 22) + 1_420_070_400_000))
+	now := time.Now()
+	return !timestamp.Before(time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)) && !timestamp.After(now.Add(24*time.Hour))
 }
 
 func validCloudflareAPIKey(token string) bool {

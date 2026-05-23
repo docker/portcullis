@@ -55,8 +55,8 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		// providers / data-store URIs / Cloudflare Origin CA / etc.).
 		{"discord_bot_token", "MTI" + strings.Repeat("a", 22) + "." + strings.Repeat("b", 6) + "." + strings.Repeat("c", 30)},
 		{"discord_bot_token_n_prefix", "NDQ" + strings.Repeat("a", 22) + "." + strings.Repeat("b", 6) + "." + strings.Repeat("c", 30)},
-		{"discord_webhook_url", "https://discord.com/api/webhooks/" + strings.Repeat("1", 18) + "/" + strings.Repeat("a", 60)},
-		{"discord_webhook_legacy", "https://discordapp.com/api/webhooks/" + strings.Repeat("1", 18) + "/" + strings.Repeat("a", 60)},
+		{"discord_webhook_url", "https://discord.com/api/webhooks/1174109840998400000/" + strings.Repeat("a", 60)},
+		{"discord_webhook_legacy", "https://discordapp.com/api/webhooks/1174109840998400000/" + strings.Repeat("a", 60)},
 		{"telegram_bot_token", strings.Repeat("1", 10) + ":AA" + strings.Repeat("a", 33)},
 		{"flyio_macaroon", "FlyV1 " + "fm2_" + strings.Repeat("a", 80)},
 		{"groq_api_key", "gsk_" + strings.Repeat("a", 52)},
@@ -609,6 +609,15 @@ func TestGitHubPlaceholderFalsePositive(t *testing.T) {
 	t.Parallel()
 
 	in := "ghp_${OPENFGA_DATASTORE_PASSWORD}"
+
+	assert.False(t, portcullis.Contains(in))
+	assert.Equal(t, in, portcullis.Redact(in))
+}
+
+func TestDiscordWebhooksRequirePlausibleSnowflake(t *testing.T) {
+	t.Parallel()
+
+	in := "https://discord.com/api/webhooks/18446744073709551615/" + strings.Repeat("a", 60)
 
 	assert.False(t, portcullis.Contains(in))
 	assert.Equal(t, in, portcullis.Redact(in))
