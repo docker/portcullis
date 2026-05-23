@@ -258,7 +258,7 @@ func scanFileBytes(path, root string, maxSize int64, scanBinary bool, errOut io.
 	if !ok {
 		return nil
 	}
-	matches := portcullis.Find(string(data))
+	matches := portcullis.FindBytes(data)
 	if len(matches) == 0 {
 		return nil
 	}

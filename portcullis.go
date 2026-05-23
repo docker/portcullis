@@ -3,6 +3,7 @@ package portcullis
 import (
 	"slices"
 	"strings"
+	"unsafe"
 )
 
 // Marker replaces every detected secret span. Chosen so it doesn't
@@ -104,6 +105,29 @@ func Contains(text string) bool {
 		}
 	}
 	return false
+}
+
+// FindBytes is like [Find] but accepts a []byte. It does not copy
+// the input: each returned [Match.Value] aliases b. Callers must
+// not mutate b for as long as those Value strings are in use.
+//
+// Use this when scanning a buffer (file contents, HTTP body, log
+// chunk) you'd otherwise pass through string(b) — that conversion
+// always copies, FindBytes does not.
+func FindBytes(b []byte) []Match {
+	if len(b) == 0 {
+		return nil
+	}
+	return Find(unsafe.String(unsafe.SliceData(b), len(b)))
+}
+
+// ContainsBytes is like [Contains] but accepts a []byte without
+// copying it. b is read but never mutated.
+func ContainsBytes(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	return Contains(unsafe.String(unsafe.SliceData(b), len(b)))
 }
 
 // Redact returns a copy of text with every detected secret span

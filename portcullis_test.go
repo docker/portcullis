@@ -586,6 +586,45 @@ func TestFindKeepsDistinctSecrets(t *testing.T) {
 	assert.Less(t, matches[0].Start, matches[1].Start, "matches must be in left-to-right order")
 }
 
+// TestFindBytesMatchesFind pins the contract that the []byte and
+// string entry points return identical matches. FindBytes avoids the
+// string(b) copy by aliasing the slice; the value of each Match.Value
+// must be byte-for-byte equal to what Find returns for the same input.
+func TestFindBytesMatchesFind(t *testing.T) {
+	t.Parallel()
+
+	in := "prefix ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD" + " mid dckr_pat_" +
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAA" + " suffix"
+
+	assert.Equal(t, portcullis.Find(in), portcullis.FindBytes([]byte(in)))
+}
+
+// TestFindBytesEmptyInputs: nil and empty slices must return nil
+// without dereferencing the slice header.
+func TestFindBytesEmptyInputs(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, portcullis.FindBytes(nil))
+	assert.Nil(t, portcullis.FindBytes([]byte{}))
+}
+
+// TestContainsBytesMatchesContains pins the parity of the []byte
+// and string Contains entry points across both detection and
+// negative cases.
+func TestContainsBytesMatchesContains(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"",
+		"hello world",
+		"ghp_" + "cxLeRrvbJfmYdUtr70xnNE3Q7Gvli43s19PD",
+	}
+	for _, in := range cases {
+		assert.Equalf(t, portcullis.Contains(in), portcullis.ContainsBytes([]byte(in)),
+			"parity must hold for %q", in)
+	}
+}
+
 // TestRedactScalesLinearly is a guard-rail against accidentally
 // reintroducing a quadratic algorithm when iterating on Redact
 // (e.g. retrying every rule from each character offset). With the

@@ -60,3 +60,31 @@ func BenchmarkContainsWithSecret(b *testing.B) {
 		_ = portcullis.Contains(text)
 	}
 }
+
+// BenchmarkFindBytesCleanInput vs BenchmarkRedactCleanInput / Find
+// pins the no-copy property of the []byte entry point: the
+// allocation count must stay flat as input size grows, while the
+// equivalent Find(string(buf)) call grows linearly with the buffer.
+func BenchmarkFindBytesCleanInput(b *testing.B) {
+	buf := []byte(strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200))
+	b.SetBytes(int64(len(buf)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = portcullis.FindBytes(buf)
+	}
+}
+
+// BenchmarkFindStringCopyCleanInput is the same scenario as
+// BenchmarkFindBytesCleanInput but goes through Find(string(buf)),
+// which forces a copy. The delta vs FindBytes is the win the new
+// API gives library callers who already hold a []byte.
+func BenchmarkFindStringCopyCleanInput(b *testing.B) {
+	buf := []byte(strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200))
+	b.SetBytes(int64(len(buf)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = portcullis.Find(string(buf))
+	}
+}
