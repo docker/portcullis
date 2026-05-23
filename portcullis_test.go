@@ -613,6 +613,15 @@ func TestGitHubPlaceholderFalsePositive(t *testing.T) {
 	assert.Equal(t, in, portcullis.Redact(in))
 }
 
+func TestAWSBedrockKeysMustDecodeToBedrockEnvelope(t *testing.T) {
+	t.Parallel()
+
+	in := "ABSKMCAk4WokBQ6h5EXDyutr1m9t94xbtTJMWt5nOd3Y3Tz073NzSuLWZM+9r88xzL5mXR76ZKv/o4KfM5wkB1qb9Habfw4+Zhs3a2GvuvLe3qdOghel0R7dUev0mt5pNm7eaVu1ut9cOePRJsy4hAHGtbEc+kR2nVAw+odag5/vmlXeW2ONfliLgMgExNu+r+SGBpiiKoig+AncpLRJwtJg990KlOXAh8YaNrG/YY5wVBeGFSk4MUINwYkDlNAfuoqCUIVSwav0OR7Bl"
+
+	assert.False(t, portcullis.Contains(in))
+	assert.Equal(t, in, portcullis.Redact(in))
+}
+
 func TestJWTsMustBeJSONAndSigned(t *testing.T) {
 	t.Parallel()
 

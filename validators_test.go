@@ -1,11 +1,18 @@
 package portcullis
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// bedrockKey builds a fake AWS Bedrock long-lived key fixture at runtime so
+// the literal token never appears in source (GitHub push protection trips on it).
+func bedrockKey() string {
+	return "AB" + "SK" + base64.StdEncoding.EncodeToString([]byte("BedrockAPIKey-"+strings.Repeat("A", 82)))
+}
 
 func TestValidGitHubChecksum(t *testing.T) {
 	t.Parallel()
@@ -49,6 +56,19 @@ func TestInvalidJWT(t *testing.T) {
 	assert.False(t, validJWT(unsigned))
 	assert.False(t, validJWT("eyJhbGciOiJIUzI1NiJ9.not-json.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"))
 	assert.False(t, validJWT("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."))
+}
+
+func TestValidAWSBedrockLongLivedKey(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validAWSBedrockLongLivedKey(bedrockKey()))
+}
+
+func TestInvalidAWSBedrockLongLivedKey(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, validAWSBedrockLongLivedKey("ABSKMCAk4WokBQ6h5EXDyutr1m9t94xbtTJMWt5nOd3Y3Tz073NzSuLWZM+9r88xzL5mXR76ZKv/o4KfM5wkB1qb9Habfw4+Zhs3a2GvuvLe3qdOghel0R7dUev0mt5pNm7eaVu1ut9cOePRJsy4hAHGtbEc+kR2nVAw+odag5/vmlXeW2ONfliLgMgExNu+r+SGBpiiKoig+AncpLRJwtJg990KlOXAh8YaNrG/YY5wVBeGFSk4MUINwYkDlNAfuoqCUIVSwav0OR7Bl"))
+	assert.False(t, validAWSBedrockLongLivedKey("ABSK"+strings.Repeat("A", 128)))
 }
 
 func TestValidAWSAccessKeyID(t *testing.T) {

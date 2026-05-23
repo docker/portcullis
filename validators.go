@@ -52,6 +52,17 @@ func decodeJSON(segment string, v any) bool {
 	return json.Unmarshal(decoded, v) == nil
 }
 
+func validAWSBedrockLongLivedKey(token string) bool {
+	if len(token) != 132 || len(token)%4 != 0 {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(token[4:])
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(string(decoded), "BedrockAPIKey-")
+}
+
 func validAWSAccessKeyID(token string) bool {
 	if len(token) != 20 {
 		return false

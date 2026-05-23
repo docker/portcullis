@@ -1162,13 +1162,15 @@ var rules = sync.OnceValue(func() []rule {
 		// LLM-provider key formats added since the previous batches.
 
 		{
-			// aws-bedrock-long-lived-api-key. The 2024 Bedrock
-			// programmatic-access keys carry the `ABSK` prefix followed
-			// by a 109-269 char base64 body (lengths vary with the
-			// embedded scope / metadata, plus optional `=` padding).
-			expression:    `ABSK[A-Za-z0-9+/]{109,269}={0,2}`,
+			// aws-bedrock-long-lived-api-key. Bedrock long-lived API
+			// keys are `ABSK` plus a 128-character base64 envelope whose
+			// decoded payload starts with `BedrockAPIKey-`. This final
+			// check rejects arbitrary base64 blobs that happen to start
+			// with `ABSK`.
+			expression:    `ABSK[A-Za-z0-9+/]{128}`,
 			keywords:      []string{"ABSK"},
 			caseSensitive: true,
+			validator:     validAWSBedrockLongLivedKey,
 		},
 		{
 			// aws-bedrock-short-lived-api-key. Short-lived Bedrock keys
