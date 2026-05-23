@@ -568,7 +568,7 @@ func TestFindDeduplicatesOverlappingMatches(t *testing.T) {
 	matches := portcullis.Find(in)
 	require.Len(t, matches, 1, "overlapping rules must collapse to one match: %v", matches)
 	assert.Equal(t, 0, matches[0].Start)
-	assert.Equal(t, in, matches[0].Value)
+	assert.Equal(t, "eyJrIjoi"+strings.Repeat("A", 80), matches[0].Value)
 }
 
 // TestFindKeepsDistinctSecrets: two non-overlapping secrets in the
@@ -611,6 +611,16 @@ func TestGitHubPlaceholderFalsePositive(t *testing.T) {
 
 	assert.False(t, portcullis.Contains(in))
 	assert.Equal(t, in, portcullis.Redact(in))
+}
+
+func TestJWTsMustBeJSONAndSigned(t *testing.T) {
+	t.Parallel()
+
+	unsigned := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0." +
+		"eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ." +
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	assert.False(t, portcullis.Contains(unsigned))
+	assert.Equal(t, unsigned, portcullis.Redact(unsigned))
 }
 
 func TestAWSAccessKeyIDsMustEncodePlausibleAccountID(t *testing.T) {

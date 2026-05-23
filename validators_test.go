@@ -31,6 +31,26 @@ func TestInvalidGitHubChecksum(t *testing.T) {
 	assert.False(t, validGitHubChecksum("github_pat_"+strings.Repeat("a", 22)+"_"+strings.Repeat("b", 59)))
 }
 
+func TestValidJWT(t *testing.T) {
+	t.Parallel()
+
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+		"eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ." +
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	assert.True(t, validJWT(token))
+}
+
+func TestInvalidJWT(t *testing.T) {
+	t.Parallel()
+
+	unsigned := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0." +
+		"eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ." +
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	assert.False(t, validJWT(unsigned))
+	assert.False(t, validJWT("eyJhbGciOiJIUzI1NiJ9.not-json.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"))
+	assert.False(t, validJWT("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."))
+}
+
 func TestValidAWSAccessKeyID(t *testing.T) {
 	t.Parallel()
 

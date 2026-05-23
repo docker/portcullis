@@ -394,10 +394,13 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"ionic"},
 		},
 		{
-			// jwt-token
-			expression:    `ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9\/\\_-]{17,}\.(?:[a-zA-Z0-9\/\\_-]{10,}={0,2})?`,
+			// jwt-token. Regex catches compact JWT-looking text; the
+			// validator then base64url-decodes header and payload, requires
+			// JSON in both segments, and rejects unsigned `alg=none` JWTs.
+			expression:    asSecretGroup(`?P<secret>ey[a-zA-Z0-9_-]{17,}\.ey[a-zA-Z0-9_-]{17,}\.[a-zA-Z0-9_-]{10,}`),
 			keywords:      []string{".eyJ"},
 			caseSensitive: true,
+			validator:     validJWT,
 		},
 		{
 			// linear-api-token

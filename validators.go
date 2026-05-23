@@ -1,6 +1,8 @@
 package portcullis
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"hash/crc32"
 	"strings"
 )
@@ -19,6 +21,35 @@ func validGitHubChecksum(token string) bool {
 	provided := token[len(token)-githubChecksumLen:]
 	checksumless := token[:len(token)-githubChecksumLen]
 	return provided == base62CRC32(checksumless)
+}
+
+func validJWT(token string) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return false
+	}
+
+	var header struct {
+		Alg string `json:"alg"`
+		Typ string `json:"typ"`
+	}
+	if !decodeJSON(parts[0], &header) || header.Alg == "" || strings.EqualFold(header.Alg, "none") {
+		return false
+	}
+
+	var payload map[string]any
+	if !decodeJSON(parts[1], &payload) || len(payload) == 0 {
+		return false
+	}
+	return true
+}
+
+func decodeJSON(segment string, v any) bool {
+	decoded, err := base64.RawURLEncoding.DecodeString(segment)
+	if err != nil {
+		return false
+	}
+	return json.Unmarshal(decoded, v) == nil
 }
 
 func validAWSAccessKeyID(token string) bool {
