@@ -22,12 +22,22 @@ const (
 )
 
 // rule pairs a regular expression with a keyword shortlist. A rule
-// matches when the (lower-cased) input contains any of the keywords
-// AND the (case-sensitive) expression matches; the keyword filter is
-// what keeps detection fast for typical inputs.
+// matches when the input contains any of the keywords AND the
+// expression matches; the keyword filter is what keeps detection
+// fast for typical inputs.
+//
+// Keywords are matched case-insensitively by default (the AC
+// pre-filter bakes ASCII case-folding into its transition table).
+// Set caseSensitive when the rule's regex itself is case-sensitive
+// AND the keyword carries enough case information that a folded
+// match would over-fire — e.g. Discord's two-letter token prefixes
+// (`MT`, `ND`, `OD`…) overlap the very common bigrams `mt`, `nd`,
+// `od` in plain text. Keeping the keyword case-sensitive cuts the
+// AC false-pass rate for those rules from ~30% of files to ~5%.
 type rule struct {
-	expression string
-	keywords   []string
+	expression    string
+	keywords      []string
+	caseSensitive bool
 }
 
 // asSecretGroup wraps a `?P<secret>…` fragment in a plain group so
@@ -86,8 +96,9 @@ var rules = sync.OnceValue(func() []rule {
 			// `ACCA`) that proved to be too generic in practice — they
 			// fire on random base64 runs in minified bundles, certificate
 			// data, and crypto test vectors.
-			expression: asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16})` + quote),
-			keywords:   []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA"},
+			expression:    asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16})` + quote),
+			keywords:      []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA"},
+			caseSensitive: true,
 		},
 		{
 			// aws-secret-access-key
@@ -166,13 +177,15 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// twilio-api-key
-			expression: `SK[0-9a-fA-F]{32}`,
-			keywords:   []string{"SK"},
+			expression:    `SK[0-9a-fA-F]{32}`,
+			keywords:      []string{"SK"},
+			caseSensitive: true,
 		},
 		{
 			// age-secret-key
-			expression: `AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}`,
-			keywords:   []string{"AGE-SECRET-KEY-1"},
+			expression:    `AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}`,
+			keywords:      []string{"AGE-SECRET-KEY-1"},
+			caseSensitive: true,
 		},
 		{
 			// facebook-token
@@ -231,8 +244,9 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// clojars-api-token
-			expression: `(CLOJARS_)(?i)[a-z0-9]{60}`,
-			keywords:   []string{"CLOJARS_"},
+			expression:    `(CLOJARS_)(?i)[a-z0-9]{60}`,
+			keywords:      []string{"CLOJARS_"},
+			caseSensitive: true,
 		},
 		{
 			// contentful-delivery-api-token
@@ -296,8 +310,9 @@ var rules = sync.OnceValue(func() []rule {
 			// easypost-api-token. `EZAK` (production) / `EZTK` (test)
 			// prefixes plus the fixed 54-char body are specific enough
 			// that surrounding quotes aren't required.
-			expression: `EZ[AT]K(?i)[a-z0-9]{54}`,
-			keywords:   []string{"EZAK", "EZTK"},
+			expression:    `EZ[AT]K(?i)[a-z0-9]{54}`,
+			keywords:      []string{"EZAK", "EZTK"},
+			caseSensitive: true,
 		},
 		{
 			// fastly-api-token
@@ -316,13 +331,15 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// flutterwave-public-key
-			expression: asSecretGroup(`?P<secret>FLW(PUB|SEC)K_TEST-(?i)[a-h0-9]{32}-X`),
-			keywords:   []string{"FLWSECK_TEST-", "FLWPUBK_TEST-"},
+			expression:    asSecretGroup(`?P<secret>FLW(PUB|SEC)K_TEST-(?i)[a-h0-9]{32}-X`),
+			keywords:      []string{"FLWSECK_TEST-", "FLWPUBK_TEST-"},
+			caseSensitive: true,
 		},
 		{
 			// flutterwave-enc-key
-			expression: asSecretGroup(`?P<secret>FLWSECK_TEST[a-h0-9]{12}`),
-			keywords:   []string{"FLWSECK_TEST"},
+			expression:    asSecretGroup(`?P<secret>FLWSECK_TEST[a-h0-9]{12}`),
+			keywords:      []string{"FLWSECK_TEST"},
+			caseSensitive: true,
 		},
 		{
 			// frameio-api-token
@@ -336,8 +353,9 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// grafana-api-token
-			expression: `['\"]?eyJrIjoi(?i)[a-z0-9\-_=]{72,92}['\"]?`,
-			keywords:   []string{"eyJrIjoi"},
+			expression:    `['\"]?eyJrIjoi(?i)[a-z0-9\-_=]{72,92}['\"]?`,
+			keywords:      []string{"eyJrIjoi"},
+			caseSensitive: true,
 		},
 		{
 			// hashicorp-tf-api-token. The `<14 chars>.atlasv1.<body>`
@@ -368,8 +386,9 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// jwt-token
-			expression: `ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9\/\\_-]{17,}\.(?:[a-zA-Z0-9\/\\_-]{10,}={0,2})?`,
-			keywords:   []string{".eyJ"},
+			expression:    `ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9\/\\_-]{17,}\.(?:[a-zA-Z0-9\/\\_-]{10,}={0,2})?`,
+			keywords:      []string{".eyJ"},
+			caseSensitive: true,
 		},
 		{
 			// linear-api-token
@@ -425,8 +444,9 @@ var rules = sync.OnceValue(func() []rule {
 			// new-relic-user-api-key. `NRAK-` is the documented prefix;
 			// combined with the fixed 27-char body it stays specific
 			// without the surrounding quotes.
-			expression: `NRAK-[A-Z0-9]{27}`,
-			keywords:   []string{"NRAK-"},
+			expression:    `NRAK-[A-Z0-9]{27}`,
+			keywords:      []string{"NRAK-"},
+			caseSensitive: true,
 		},
 		{
 			// new-relic-user-api-id
@@ -436,8 +456,9 @@ var rules = sync.OnceValue(func() []rule {
 		{
 			// new-relic-browser-api-token. `NRJS-` is the documented
 			// prefix; the fixed 19-char body keeps the rule specific.
-			expression: `NRJS-[a-f0-9]{19}`,
-			keywords:   []string{"NRJS-"},
+			expression:    `NRJS-[a-f0-9]{19}`,
+			keywords:      []string{"NRJS-"},
+			caseSensitive: true,
 		},
 		{
 			// npm-access-token. The `npm_` prefix + fixed 36-char body is
@@ -465,8 +486,9 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// postman-api-token
-			expression: `PMAK-(?i)[a-f0-9]{24}\-[a-f0-9]{34}`,
-			keywords:   []string{"PMAK-"},
+			expression:    `PMAK-(?i)[a-f0-9]{24}\-[a-f0-9]{34}`,
+			keywords:      []string{"PMAK-"},
+			caseSensitive: true,
 		},
 		{
 			// pulumi-api-token
@@ -480,8 +502,9 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// sendgrid-api-token
-			expression: `SG\.(?i)[a-z0-9_\-\.]{66}`,
-			keywords:   []string{"SG."},
+			expression:    `SG\.(?i)[a-z0-9_\-\.]{66}`,
+			keywords:      []string{"SG."},
+			caseSensitive: true,
 		},
 		{
 			// sendinblue-api-token
@@ -548,8 +571,9 @@ var rules = sync.OnceValue(func() []rule {
 			// (base64 for "OpenAI") between two long alphanumeric runs.
 			// That marker keeps both the keyword filter and the regex
 			// extremely specific.
-			expression: `sk-[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,}`,
-			keywords:   []string{"T3BlbkFJ"},
+			expression:    `sk-[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,}`,
+			keywords:      []string{"T3BlbkFJ"},
+			caseSensitive: true,
 		},
 		{
 			// anthropic-api-key. Claude keys follow
@@ -564,14 +588,16 @@ var rules = sync.OnceValue(func() []rule {
 		{
 			// google-api-key. Used by Maps, Cloud, Firebase, Gemini and
 			// most other Google REST APIs. The `AIza` prefix is fixed.
-			expression: `AIza[0-9A-Za-z_-]{35}`,
-			keywords:   []string{"AIza"},
+			expression:    `AIza[0-9A-Za-z_-]{35}`,
+			keywords:      []string{"AIza"},
+			caseSensitive: true,
 		},
 		{
 			// google-oauth-client-secret. Issued in the Google Cloud
 			// Console for OAuth 2.0 clients; always 35 chars total.
-			expression: `GOCSPX-[A-Za-z0-9_-]{28}`,
-			keywords:   []string{"GOCSPX-"},
+			expression:    `GOCSPX-[A-Za-z0-9_-]{28}`,
+			keywords:      []string{"GOCSPX-"},
+			caseSensitive: true,
 		},
 		{
 			// digitalocean-token. v1 personal-access tokens (`dop_v1_`),
@@ -592,8 +618,9 @@ var rules = sync.OnceValue(func() []rule {
 			// the `AKCp` prefix is documented and the body is between
 			// 69 and 73 alphanumeric characters depending on when the
 			// key was issued.
-			expression: `AKCp[A-Za-z0-9]{69,73}`,
-			keywords:   []string{"AKCp"},
+			expression:    `AKCp[A-Za-z0-9]{69,73}`,
+			keywords:      []string{"AKCp"},
+			caseSensitive: true,
 		},
 		{
 			// sentry-user-auth-token. The `sntrys_` prefix is followed
@@ -667,8 +694,9 @@ var rules = sync.OnceValue(func() []rule {
 			// existing `atlassian-api-token` rule only catches values
 			// preceded by an `atlassian` keyword — this rule fills the
 			// gap for bare leakage in CLI output / logs.
-			expression: `ATATT3xFfGF0[A-Za-z0-9_=-]{180,250}`,
-			keywords:   []string{"ATATT3xFfGF0"},
+			expression:    `ATATT3xFfGF0[A-Za-z0-9_=-]{180,250}`,
+			keywords:      []string{"ATATT3xFfGF0"},
+			caseSensitive: true,
 		},
 
 		// --- Second batch of additions, focused on credentials whose
@@ -687,8 +715,15 @@ var rules = sync.OnceValue(func() []rule {
 			// without a plausible token prefix. The structural shape
 			// (M-or-N-or-O-prefixed body, two literal dots, fixed segment
 			// widths) keeps the regex itself specific.
-			expression: `[MNO][A-Za-z\d_-]{23,25}\.[\w-]{6,7}\.[\w-]{27,38}`,
-			keywords:   []string{"MT", "Mz", "ND", "NT", "Nz", "OD"},
+			//
+			// caseSensitive is critical here: the lower-cased forms of
+			// these two-letter prefixes (`mt`, `nd`, `od`, …) are common
+			// English bigrams and trip the keyword pre-filter on ~30% of
+			// arbitrary text files. Pinning the case lets the AC pass
+			// drop the regex run on those files.
+			expression:    `[MNO][A-Za-z\d_-]{23,25}\.[\w-]{6,7}\.[\w-]{27,38}`,
+			keywords:      []string{"MT", "Mz", "ND", "NT", "Nz", "OD"},
+			caseSensitive: true,
 		},
 		{
 			// discord-webhook-url. The URL itself is a bearer credential:
@@ -704,8 +739,9 @@ var rules = sync.OnceValue(func() []rule {
 			// `<8-10 digit bot id>:AA<33 char base64url>`; the literal
 			// `:AA` byte pair starts the second segment for every token
 			// the BotFather has ever issued.
-			expression: `\d{8,10}:AA[A-Za-z0-9_-]{33}`,
-			keywords:   []string{":AA"},
+			expression:    `\d{8,10}:AA[A-Za-z0-9_-]{33}`,
+			keywords:      []string{":AA"},
+			caseSensitive: true,
 		},
 		{
 			// flyio-macaroon. Fly.io API tokens are macaroons whose
@@ -715,8 +751,9 @@ var rules = sync.OnceValue(func() []rule {
 			// verbatim). Capping the body at 400 chars stops the regex
 			// from swallowing arbitrary trailing text when the token is
 			// not separated from following content by whitespace.
-			expression: `FlyV1 fm2_[A-Za-z0-9_=-]{40,400}`,
-			keywords:   []string{"FlyV1 fm2_"},
+			expression:    `FlyV1 fm2_[A-Za-z0-9_=-]{40,400}`,
+			keywords:      []string{"FlyV1 fm2_"},
+			caseSensitive: true,
 		},
 		{
 			// groq-api-key. Groq Cloud API keys carry the `gsk_` prefix
@@ -757,8 +794,9 @@ var rules = sync.OnceValue(func() []rule {
 			// carry the `CCIPRJ_` prefix followed by `<vcs-org>_<token>`.
 			// User-scoped personal tokens are 40-char hex without a
 			// prefix and are too generic to match safely on their own.
-			expression: `CCIPRJ_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{32,}`,
-			keywords:   []string{"CCIPRJ_"},
+			expression:    `CCIPRJ_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{32,}`,
+			keywords:      []string{"CCIPRJ_"},
+			caseSensitive: true,
 		},
 		{
 			// cloudinary-url. Cloudinary SDK credentials are passed as a
@@ -792,8 +830,9 @@ var rules = sync.OnceValue(func() []rule {
 			// / `AccountName` framing is only metadata. The base64 value
 			// is typically 88 chars (44-byte key) but we accept anything
 			// from 20 chars upwards to cover shorter SAS-signing keys.
-			expression: `DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=(?P<secret>[A-Za-z0-9+/=]{20,})`,
-			keywords:   []string{"DefaultEndpointsProtocol="},
+			expression:    `DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=(?P<secret>[A-Za-z0-9+/=]{20,})`,
+			keywords:      []string{"DefaultEndpointsProtocol="},
+			caseSensitive: true,
 		},
 		{
 			// mapbox-secret-key. Mapbox publishable keys (`pk.<60>.<22>`)
@@ -859,8 +898,9 @@ var rules = sync.OnceValue(func() []rule {
 			// while preventing the regex from absorbing arbitrary
 			// trailing alphanumeric content if a token is not
 			// whitespace-terminated.
-			expression: `ops_eyJ[A-Za-z0-9+/=_-]{250,1000}`,
-			keywords:   []string{"ops_eyJ"},
+			expression:    `ops_eyJ[A-Za-z0-9+/=_-]{250,1000}`,
+			keywords:      []string{"ops_eyJ"},
+			caseSensitive: true,
 		},
 		{
 			// openrouter-api-key. OpenRouter (LLM router) keys carry
@@ -1003,8 +1043,9 @@ var rules = sync.OnceValue(func() []rule {
 			// still required), but it's part of a recovery pair that
 			// must remain confidential and is treated as a secret in
 			// every 1Password compliance regime.
-			expression: `A3-[A-Z0-9]{6}-(?:[A-Z0-9]{11}|[A-Z0-9]{6}-[A-Z0-9]{5})-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}`,
-			keywords:   []string{"A3-"},
+			expression:    `A3-[A-Z0-9]{6}-(?:[A-Z0-9]{11}|[A-Z0-9]{6}-[A-Z0-9]{5})-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}`,
+			keywords:      []string{"A3-"},
+			caseSensitive: true,
 		},
 
 		// --- Fifth batch of additions: extra credentials cross-checked
@@ -1063,8 +1104,9 @@ var rules = sync.OnceValue(func() []rule {
 			// (uppercase, fixed) is documented for runner registration
 			// tokens; the trailing 20-char body uses the same charset
 			// as the rest of the GitLab tokens.
-			expression: `GR1348941[0-9a-zA-Z_-]{20}`,
-			keywords:   []string{"GR1348941"},
+			expression:    `GR1348941[0-9a-zA-Z_-]{20}`,
+			keywords:      []string{"GR1348941"},
+			caseSensitive: true,
 		},
 		{
 			// gitlab-runner-authentication-token. `glrt-` prefix; same
@@ -1104,8 +1146,9 @@ var rules = sync.OnceValue(func() []rule {
 			// programmatic-access keys carry the `ABSK` prefix followed
 			// by a 109-269 char base64 body (lengths vary with the
 			// embedded scope / metadata, plus optional `=` padding).
-			expression: `ABSK[A-Za-z0-9+/]{109,269}={0,2}`,
-			keywords:   []string{"ABSK"},
+			expression:    `ABSK[A-Za-z0-9+/]{109,269}={0,2}`,
+			keywords:      []string{"ABSK"},
+			caseSensitive: true,
 		},
 		{
 			// aws-bedrock-short-lived-api-key. Short-lived Bedrock keys
@@ -1127,8 +1170,9 @@ var rules = sync.OnceValue(func() []rule {
 			// the `heroku` keyword). The new tokens carry an `HRKU-AA`
 			// prefix + 58-char base64url body and are emitted bare by
 			// the Heroku CLI / API responses.
-			expression: `HRKU-AA[0-9a-zA-Z_-]{58}`,
-			keywords:   []string{"HRKU-AA"},
+			expression:    `HRKU-AA[0-9a-zA-Z_-]{58}`,
+			keywords:      []string{"HRKU-AA"},
+			caseSensitive: true,
 		},
 		{
 			// azure-ad-client-secret. Azure AD / Entra ID v2 client
@@ -1137,8 +1181,9 @@ var rules = sync.OnceValue(func() []rule {
 			// stays selective enough on real-world text (the digit-Q-
 			// tilde sequence is rare outside this format) for the AC
 			// pre-filter to remain useful.
-			expression: `[A-Za-z0-9_~.]{3}\dQ~[A-Za-z0-9_~.-]{31,34}`,
-			keywords:   []string{"Q~"},
+			expression:    `[A-Za-z0-9_~.]{3}\dQ~[A-Za-z0-9_~.-]{31,34}`,
+			keywords:      []string{"Q~"},
+			caseSensitive: true,
 		},
 		{
 			// openshift-user-token. OpenShift / OKD user OAuth tokens
@@ -1180,8 +1225,9 @@ var rules = sync.OnceValue(func() []rule {
 			// Metric / Log APIs); distinct from the user-API (`NRAK-`)
 			// and browser (`NRJS-`) keys already covered. Body is 32
 			// hex characters with optional dashes (no fixed positions).
-			expression: `NRII-[a-zA-Z0-9-]{32}`,
-			keywords:   []string{"NRII-"},
+			expression:    `NRII-[a-zA-Z0-9-]{32}`,
+			keywords:      []string{"NRII-"},
+			caseSensitive: true,
 		},
 		{
 			// sentry-user-token. The personal user-token format uses
@@ -1221,8 +1267,9 @@ var rules = sync.OnceValue(func() []rule {
 			// (decoding to `refd`) followed by a 59-char alphanumeric
 			// body. Leakage grants the same scope as a referenced
 			// access token until the latter is revoked.
-			expression: `cmVmd[A-Za-z0-9]{59}`,
-			keywords:   []string{"cmVmd"},
+			expression:    `cmVmd[A-Za-z0-9]{59}`,
+			keywords:      []string{"cmVmd"},
+			caseSensitive: true,
 		},
 		{
 			// infracost-api-token. Cost-estimation API tokens carry the
@@ -1257,8 +1304,9 @@ var rules = sync.OnceValue(func() []rule {
 		{
 			// yandex-cloud-api-key. Service-account API keys carry the
 			// uppercase `AQVN` prefix + 35-38 char base64url body.
-			expression: `AQVN[A-Za-z0-9_-]{35,38}`,
-			keywords:   []string{"AQVN"},
+			expression:    `AQVN[A-Za-z0-9_-]{35,38}`,
+			keywords:      []string{"AQVN"},
+			caseSensitive: true,
 		},
 		{
 			// sourcegraph-access-token. Sourcegraph (code-search) access
@@ -1530,8 +1578,9 @@ var rules = sync.OnceValue(func() []rule {
 			// contentful-personal-access-token. The `CFPAT-` prefix
 			// is documented for Contentful personal access tokens;
 			// the body is 43 chars of base64url-ish content.
-			expression: `CFPAT-[A-Za-z0-9_-]{43}`,
-			keywords:   []string{"CFPAT-"},
+			expression:    `CFPAT-[A-Za-z0-9_-]{43}`,
+			keywords:      []string{"CFPAT-"},
+			caseSensitive: true,
 		},
 		{
 			// doppler-extra-tokens. Doppler issues five additional
@@ -1677,8 +1726,9 @@ var rules = sync.OnceValue(func() []rule {
 			// nightfall-api-key. The Nightfall DLP platform issues
 			// keys shaped `NF-<32 alnum>` — the `NF-` prefix is rare
 			// enough at scale to keep the AC pre-filter selective.
-			expression: `NF-[A-Za-z0-9]{32}`,
-			keywords:   []string{"NF-"},
+			expression:    `NF-[A-Za-z0-9]{32}`,
+			keywords:      []string{"NF-"},
+			caseSensitive: true,
 		},
 		{
 			// zapier-webhook. Catch hooks let any caller post arbitrary
@@ -1714,8 +1764,9 @@ var rules = sync.OnceValue(func() []rule {
 		{
 			// voiceflow-api-key. Project / dialog manager / WS-API keys
 			// share the `VF.<channel?>.<24 hex>.<16 alnum>` shape.
-			expression: `VF\.(?:(?:DM|WS)\.)?[a-fA-F0-9]{24}\.[A-Za-z0-9]{16}`,
-			keywords:   []string{"VF."},
+			expression:    `VF\.(?:(?:DM|WS)\.)?[a-fA-F0-9]{24}\.[A-Za-z0-9]{16}`,
+			keywords:      []string{"VF."},
+			caseSensitive: true,
 		},
 		{
 			// deno-deploy-token. Deno Deploy issues personal (`ddp_`)
@@ -1726,15 +1777,17 @@ var rules = sync.OnceValue(func() []rule {
 		{
 			// ubidots-token. IoT-platform tokens carry the `BBFF-`
 			// prefix and a 30-char alphanumeric body.
-			expression: `BBFF-[A-Za-z0-9]{30}`,
-			keywords:   []string{"BBFF-"},
+			expression:    `BBFF-[A-Za-z0-9]{30}`,
+			keywords:      []string{"BBFF-"},
+			caseSensitive: true,
 		},
 		{
 			// circleci-personal-access-token-v2. The 2024 token format
 			// (`CCIPAT_<22 alnum>_<40 hex>`) replaces the legacy 40-hex
 			// PAT shape; complements the `CCIPRJ_` project-token rule.
-			expression: `CCIPAT_[A-Za-z0-9]{22}_[a-fA-F0-9]{40}`,
-			keywords:   []string{"CCIPAT_"},
+			expression:    `CCIPAT_[A-Za-z0-9]{22}_[a-fA-F0-9]{40}`,
+			keywords:      []string{"CCIPAT_"},
+			caseSensitive: true,
 		},
 		{
 			// endorlabs-api-token. Endor Labs supply-chain platform
@@ -1748,8 +1801,9 @@ var rules = sync.OnceValue(func() []rule {
 			// terminated by an 8-char hex CRC. We cap the body at 200
 			// chars to keep the regex from absorbing trailing text
 			// when the password isn't whitespace-terminated.
-			expression: `ATBB[A-Za-z0-9_=.-]{20,200}`,
-			keywords:   []string{"ATBB"},
+			expression:    `ATBB[A-Za-z0-9_=.-]{20,200}`,
+			keywords:      []string{"ATBB"},
+			caseSensitive: true,
 		},
 		{
 			// stripe-payment-intent-client-secret. Client secrets shaped
@@ -1787,8 +1841,9 @@ var rules = sync.OnceValue(func() []rule {
 			// `flutterwave-public-key` rule only matches `*_TEST-` keys;
 			// production keys use `FLWSECK-<32 hex>-X` (no `_TEST`
 			// segment) and grant live API access.
-			expression: `FLWSECK-[a-f0-9]{32}-X`,
-			keywords:   []string{"FLWSECK-"},
+			expression:    `FLWSECK-[a-f0-9]{32}-X`,
+			keywords:      []string{"FLWSECK-"},
+			caseSensitive: true,
 		},
 		{
 			// slack-workflow-webhook. Workflow Builder webhooks have a
@@ -1813,9 +1868,39 @@ var rules = sync.OnceValue(func() []rule {
 // the overwhelmingly common case — therefore never pays for
 // compiling any of the ~175 expressions in the catalogue, only for
 // the keyword bitset and the AC table.
+//
+// caseSensitive, when true, requires the post-filter step (see
+// [compiledRule.passes]) to find at least one of [csKW] verbatim
+// in the original-case input — not the case-folded form the AC
+// already matched. This avoids running the regex on every file
+// that happens to contain a folded form of a CS keyword (e.g. the
+// English bigrams `mt`/`nd`/`od` for Discord, `sk` for Twilio).
 type compiledRule struct {
-	kwBits  kwMask
-	compile func() (*regexp.Regexp, int) // memoised; returns (re, secretIdx)
+	kwBits        kwMask
+	caseSensitive bool
+	csKW          []string
+	compile       func() (*regexp.Regexp, int) // memoised; returns (re, secretIdx)
+}
+
+// passes returns true when the rule should run its regex against
+// text: the AC pre-filter must have matched, and — for case-sensitive
+// rules — at least one keyword must appear in the original input
+// without the case-fold. The post-filter cost is one
+// [strings.Contains] per CS keyword, two orders of magnitude
+// cheaper than running the rule's regex over the whole file.
+func (r *compiledRule) passes(found kwMask, text string) bool {
+	if !found.overlaps(r.kwBits) {
+		return false
+	}
+	if !r.caseSensitive {
+		return true
+	}
+	for _, k := range r.csKW {
+		if strings.Contains(text, k) {
+			return true
+		}
+	}
+	return false
 }
 
 // ruleSet bundles the runtime catalogue with the Aho–Corasick
@@ -1856,7 +1941,9 @@ var compiledRuleSet = sync.OnceValue(func() *ruleSet {
 		}
 		expr := r.expression // bind for the closure below
 		rules[i] = compiledRule{
-			kwBits: bits,
+			kwBits:        bits,
+			caseSensitive: r.caseSensitive,
+			csKW:          r.keywords,
 			compile: sync.OnceValues(func() (*regexp.Regexp, int) {
 				re := regexp.MustCompile(expr)
 				return re, re.SubexpIndex("secret")

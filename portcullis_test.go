@@ -586,6 +586,53 @@ func TestFindKeepsDistinctSecrets(t *testing.T) {
 	assert.Less(t, matches[0].Start, matches[1].Start, "matches must be in left-to-right order")
 }
 
+// TestCaseSensitiveRulesIgnoreLowercaseLookalikes pins the AC
+// post-filter that makes the case-sensitive rule flag work. Each
+// case below contains the *case-folded* version of a CS rule's
+// keyword inside an otherwise-secret-shaped payload, plus enough
+// noise to make the body length match the rule. The AC pre-filter
+// matches via case-fold (and would, before this change, run the
+// regex), but the post-filter requires the keyword's exact case in
+// the original input. Without the post-filter the regex would
+// either run for nothing (CPU waste) or, worse, match if the body
+// shape happened to satisfy the rule despite the wrong-case
+// keyword.
+func TestCaseSensitiveRulesIgnoreLowercaseLookalikes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		text string
+	}{
+		// Discord bot token: kw `MT`/`ND`/`OD`. The lowercased
+		// versions are common English bigrams; before the post-filter
+		// they tripped the regex on ~30% of plain text files.
+		{"discord_lowercase_mt", "the format meets the requirement and the test passes"},
+		{"discord_lowercase_nd", "send and the rest of the line is unrelated"},
+		{"discord_lowercase_od", "food code modules wood"},
+		// Twilio: kw `SK`. Lowercase `sk` is in `desk`, `ask`, `risk`…
+		{"twilio_lowercase_sk", "the desk asked the risk team for the report"},
+		// New Relic browser: kw `NRJS-`. Folded form `nrjs-` should not fire.
+		{"new_relic_browser_lowercase", "nrjs-" + strings.Repeat("a", 19)},
+		// Google API key: kw `AIza`. Folded form `aiza` should not fire.
+		{"google_api_key_lowercase", "aiza" + strings.Repeat("a", 35)},
+		// Telegram bot: kw `:AA`. Lowercase `:aa` would match plain text.
+		{"telegram_lowercase", strings.Repeat("1", 10) + ":aa" + strings.Repeat("a", 33)},
+		// Fly.io macaroon: kw `FlyV1 fm2_`. Lowercase variant common
+		// in normal text.
+		{"flyio_lowercase", "flyv1 fm2_" + strings.Repeat("a", 80)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Falsef(t, portcullis.Contains(tc.text),
+				"case-folded keyword must not fire CS rule on %q", tc.text)
+			assert.Equalf(t, tc.text, portcullis.Redact(tc.text),
+				"text must pass through unchanged: %q", tc.text)
+		})
+	}
+}
+
 // TestFindBytesMatchesFind pins the contract that the []byte and
 // string entry points return identical matches. FindBytes avoids the
 // string(b) copy by aliasing the slice; the value of each Match.Value

@@ -44,7 +44,7 @@ func Find(text string) []Match {
 	var matches []Match
 	for i := range rs.rules {
 		r := &rs.rules[i]
-		if !found.overlaps(r.kwBits) {
+		if !r.passes(found, text) {
 			continue
 		}
 		re, secretIdx := r.compile()
@@ -96,7 +96,7 @@ func Contains(text string) bool {
 	}
 	for i := range rs.rules {
 		r := &rs.rules[i]
-		if !found.overlaps(r.kwBits) {
+		if !r.passes(found, text) {
 			continue
 		}
 		re, _ := r.compile()
@@ -156,7 +156,7 @@ func Redact(text string) string {
 	out := text
 	for i := range rs.rules {
 		r := &rs.rules[i]
-		if !found.overlaps(r.kwBits) {
+		if !r.passes(found, out) {
 			continue
 		}
 		out = redactWithRule(r, out)
