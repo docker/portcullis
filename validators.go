@@ -162,6 +162,35 @@ func validDiscordWebhookURL(token string) bool {
 	return !timestamp.Before(time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)) && !timestamp.After(now.Add(24*time.Hour))
 }
 
+func validAzureStorageAccountKey(token string) bool {
+	decoded, err := base64.StdEncoding.DecodeString(token)
+	return err == nil && len(decoded) == 64
+}
+
+func validDockerConfigSecret(token string) bool {
+	decoded, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return false
+	}
+	var cfg struct {
+		Auths map[string]struct {
+			Auth string `json:"auth"`
+		} `json:"auths"`
+	}
+	if err := json.Unmarshal(decoded, &cfg); err != nil || len(cfg.Auths) == 0 {
+		return false
+	}
+	for registry, auth := range cfg.Auths {
+		if registry == "" || auth.Auth == "" {
+			return false
+		}
+		if _, err := base64.StdEncoding.DecodeString(auth.Auth); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
 func validCloudflareAPIKey(token string) bool {
 	return !strings.ContainsAny(token, "-_")
 }

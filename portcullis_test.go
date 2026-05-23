@@ -68,7 +68,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"cloudinary_url", "cloudinary://" + strings.Repeat("1", 15) + ":" + strings.Repeat("a", 27) + "@" + strings.Repeat("b", 10)},
 		{"mongodb_conn_string", "mongodb+srv://user:" + strings.Repeat("p", 24) + "@cluster.mongodb.net"},
 		{"postgres_conn_string", "postgresql://user:" + strings.Repeat("p", 24) + "@db.example.com"},
-		{"azure_storage_conn", "DefaultEndpointsProtocol=https;AccountName=mystorage;AccountKey=" + strings.Repeat("a", 86) + "=="},
+		{"azure_storage_conn", "DefaultEndpointsProtocol=https;AccountName=mystorage;AccountKey=" + strings.Repeat("YWFh", 21) + "YQ=="},
 		{"mapbox_secret_key", "sk." + strings.Repeat("a", 60) + "." + strings.Repeat("b", 22)},
 		{"vault_batch_token", "hvb." + strings.Repeat("a", 100)},
 		{"vault_recovery_token", "hvr." + strings.Repeat("a", 100)},
@@ -612,6 +612,19 @@ func TestGitHubPlaceholderFalsePositive(t *testing.T) {
 
 	assert.False(t, portcullis.Contains(in))
 	assert.Equal(t, in, portcullis.Redact(in))
+}
+
+func TestStructuredSecretsMustDecode(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"DefaultEndpointsProtocol=https;AccountName=mystorage;AccountKey=" + strings.Repeat("YWFh", 21) + "YWE=",
+		".dockerconfigjson: eyJub3QiOiJkb2NrZXIgY29uZmlnIn0=",
+	}
+	for _, in := range cases {
+		assert.False(t, portcullis.Contains(in))
+		assert.Equal(t, in, portcullis.Redact(in))
+	}
 }
 
 func TestDiscordWebhooksRequirePlausibleSnowflake(t *testing.T) {

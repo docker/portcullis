@@ -85,6 +85,32 @@ func TestInvalidDiscordWebhookURL(t *testing.T) {
 	assert.False(t, validDiscordWebhookURL("https://discord.com/api/webhooks/not-a-number/"+strings.Repeat("a", 60)))
 }
 
+func TestValidAzureStorageAccountKey(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validAzureStorageAccountKey(strings.Repeat("YWFh", 21)+"YQ=="))
+}
+
+func TestInvalidAzureStorageAccountKey(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, validAzureStorageAccountKey(strings.Repeat("YWFh", 21)+"YWE="))
+	assert.False(t, validAzureStorageAccountKey("not-base64"))
+}
+
+func TestValidDockerConfigSecret(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validDockerConfigSecret("eyJhdXRocyI6eyJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOnsiYXV0aCI6ImRYTmxjanB3WVhOeiJ9fX0="))
+}
+
+func TestInvalidDockerConfigSecret(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, validDockerConfigSecret("eyJub3QiOiJkb2NrZXIgY29uZmlnIn0="))
+	assert.False(t, validDockerConfigSecret("ew=="))
+}
+
 func TestValidCloudflareAPIKey(t *testing.T) {
 	t.Parallel()
 

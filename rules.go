@@ -552,9 +552,11 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"typeform"},
 		},
 		{
-			// dockerconfig-secret
-			expression: `(?i)(\.(dockerconfigjson|dockercfg):\s*\|*\s*(?P<secret>(ey|ew)+[A-Za-z0-9\/\+=]+))`,
+			// dockerconfig-secret. Kubernetes docker config secret data
+			// is base64-encoded Docker config JSON with an `auths` object.
+			expression: `(?i)(\.(dockerconfigjson|dockercfg):\s*\|*\s*(?P<secret>(ey|ew)+[A-Za-z0-9/+=]+))`,
 			keywords:   []string{"dockerc"},
+			validator:  validDockerConfigSecret,
 		},
 		{
 			// docker-hub-personal-access-token. The `dckr_pat_` prefix
@@ -853,12 +855,12 @@ var rules = sync.OnceValue(func() []rule {
 		{
 			// azure-storage-connection-string. The `AccountKey=` field is
 			// the actual secret; the surrounding `DefaultEndpointsProtocol`
-			// / `AccountName` framing is only metadata. The base64 value
-			// is typically 88 chars (44-byte key) but we accept anything
-			// from 20 chars upwards to cover shorter SAS-signing keys.
-			expression:    `DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=(?P<secret>[A-Za-z0-9+/=]{20,})`,
+			// / `AccountName` framing is only metadata. Azure account keys
+			// are 512-bit symmetric keys, base64-encoded to 88 chars.
+			expression:    `DefaultEndpointsProtocol=https?;AccountName=[^;]+;AccountKey=(?P<secret>[A-Za-z0-9+/=]{88})`,
 			keywords:      []string{"DefaultEndpointsProtocol="},
 			caseSensitive: true,
+			validator:     validAzureStorageAccountKey,
 		},
 		{
 			// mapbox-secret-key. Mapbox publishable keys (`pk.<60>.<22>`)
