@@ -21,6 +21,12 @@
 //
 //	-max-size    skip files larger than this many bytes (default 10 MiB).
 //	-workers     parallel worker count (default GOMAXPROCS).
+//	-ignore      glob pattern to skip; repeatable. Patterns containing
+//	             '/' are anchored to the scan root, others match
+//	             basenames. '**' matches any run of characters,
+//	             including separators. Trailing '/' restricts the
+//	             rule to directories. Examples: -ignore '*_test.go'
+//	             -ignore 'vendor/**' -ignore 'node_modules/'
 //
 // Exit codes:
 //
@@ -65,6 +71,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	maxSize := flags.Int64("max-size", defaultMaxSize, "skip files larger than this many bytes (0 disables the limit)")
 	workers := flags.Int("workers", runtime.GOMAXPROCS(0), "parallel worker count")
+	var ignore stringSliceFlag
+	flags.Var(&ignore, "ignore", "glob pattern to skip (repeatable); e.g. '*_test.go' or 'vendor/**'")
 
 	if err := flags.Parse(args); err != nil {
 		return exitInvalid
@@ -78,7 +86,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	root := flags.Arg(0)
 
-	found, err := scan(root, *maxSize, *workers, stdout, stderr)
+	matcher, err := newIgnoreMatcher(ignore)
+	if err != nil {
+		fmt.Fprintf(stderr, "portcullis-scan: %v\n", err)
+		return exitInvalid
+	}
+
+	found, err := scan(root, *maxSize, *workers, matcher, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "portcullis-scan: %v\n", err)
 		return exitInvalid
@@ -99,7 +113,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 // walker's lexical order: the walker tags each file with a sequence
 // number, workers preserve it, and the collector reorders results
 // before writing so the output is deterministic across runs.
-func scan(root string, maxSize int64, workers int, out, errOut io.Writer) (bool, error) {
+func scan(root string, maxSize int64, workers int, ignore *ignoreMatcher, out, errOut io.Writer) (bool, error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return false, err
@@ -144,6 +158,18 @@ func scan(root string, maxSize int64, workers int, out, errOut io.Writer) (bool,
 					return filepath.SkipDir
 				}
 				return nil
+			}
+			if path != root && ignore != nil {
+				rel, relErr := filepath.Rel(root, path)
+				if relErr == nil {
+					rel = filepath.ToSlash(rel)
+					if ignore.matches(rel, d.Name(), d.IsDir()) {
+						if d.IsDir() {
+							return filepath.SkipDir
+						}
+						return nil
+					}
+				}
 			}
 			if !d.Type().IsRegular() {
 				return nil
