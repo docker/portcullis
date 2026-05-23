@@ -58,6 +58,20 @@ func TestInvalidJWT(t *testing.T) {
 	assert.False(t, validJWT("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."))
 }
 
+func TestValidCloudflareAPIKey(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validCloudflareAPIKey(strings.Repeat("a", 40)))
+	assert.True(t, validCloudflareAPIKey(strings.Repeat("A", 40)))
+}
+
+func TestInvalidCloudflareAPIKey(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, validCloudflareAPIKey("cloudflare-digital-experience-monitoring"))
+	assert.False(t, validCloudflareAPIKey("cloudflare_digital_experience_monitoring"))
+}
+
 func TestValidAWSBedrockLongLivedKey(t *testing.T) {
 	t.Parallel()
 

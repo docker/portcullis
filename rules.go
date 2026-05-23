@@ -1385,11 +1385,12 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"launchdarkly"},
 		},
 		{
-			// cloudflare-api-key. The current 40-char alphanumeric API
-			// key (distinct from the legacy 37-hex global key below and
-			// from the prefixed origin-CA key already covered).
-			expression: contextual(`cloudflare`, `[a-z0-9_-]{40}`),
+			// cloudflare-api-key. Legacy 40-char API tokens are
+			// alphanumeric; allowing hyphen / underscore here turns
+			// ordinary Cloudflare product slugs into false positives.
+			expression: contextual(`cloudflare`, `[A-Za-z0-9_-]{40}`),
 			keywords:   []string{"cloudflare"},
+			validator:  validCloudflareAPIKey,
 		},
 		{
 			// cloudflare-global-api-key. Legacy 37-hex global API key —

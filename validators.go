@@ -52,6 +52,10 @@ func decodeJSON(segment string, v any) bool {
 	return json.Unmarshal(decoded, v) == nil
 }
 
+func validCloudflareAPIKey(token string) bool {
+	return !strings.ContainsAny(token, "-_")
+}
+
 func validAWSBedrockLongLivedKey(token string) bool {
 	if len(token) != 132 || len(token)%4 != 0 {
 		return false

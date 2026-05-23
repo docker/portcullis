@@ -613,6 +613,15 @@ func TestGitHubPlaceholderFalsePositive(t *testing.T) {
 	assert.Equal(t, in, portcullis.Redact(in))
 }
 
+func TestCloudflareAPIRuleRejectsSlugs(t *testing.T) {
+	t.Parallel()
+
+	in := "'cloudflare-digital-experience-monitoring',"
+
+	assert.False(t, portcullis.Contains(in))
+	assert.Equal(t, in, portcullis.Redact(in))
+}
+
 func TestAWSBedrockKeysMustDecodeToBedrockEnvelope(t *testing.T) {
 	t.Parallel()
 
