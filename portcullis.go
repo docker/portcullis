@@ -221,7 +221,9 @@ func redactWithRule(r *compiledRule, text string) string {
 }
 
 // nextValidMatch returns the first regex match whose secret span passes
-// the optional rule validator.
+// the optional rule validator. Zero-length matches are skipped: they
+// don't correspond to a real secret, and accepting one would let
+// callers that advance by the match end loop forever.
 func nextValidMatch(compiled compiledMatch, text string) []int {
 	for offset := 0; offset < len(text); {
 		m := compiled.re.FindStringSubmatchIndex(text[offset:])
@@ -234,7 +236,7 @@ func nextValidMatch(compiled compiledMatch, text string) []int {
 			}
 		}
 		s, e := redactSpan(m, compiled.secretIdx)
-		if compiled.validator == nil || compiled.validator(text[s:e]) {
+		if e > s && (compiled.validator == nil || compiled.validator(text[s:e])) {
 			return m
 		}
 		offset = max(e, offset+1)
