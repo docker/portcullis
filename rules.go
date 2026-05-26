@@ -495,9 +495,14 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"pscale_tkn_"},
 		},
 		{
-			// private-packagist-token
-			expression: `packagist_[ou][ru]t_(?i)[a-f0-9]{68}`,
-			keywords:   []string{"packagist_uut_", "packagist_ort_", "packagist_out_"},
+			// private-packagist-token. Packagist documents three token
+			// shapes: `packagist_uut_` (user), `packagist_out_` (org),
+			// and `packagist_ort_` (org read-only). The previous regex
+			// used `[ou][ru]` which also matched a non-existent
+			// `packagist_urt_` shape that wasn't in the keyword list,
+			// creating a regex/keyword mismatch.
+			expression: `packagist_(uut|out|ort)_(?i)[a-f0-9]{68}`,
+			keywords:   []string{"packagist_uut_", "packagist_out_", "packagist_ort_"},
 		},
 		{
 			// postman-api-token
