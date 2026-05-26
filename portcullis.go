@@ -63,8 +63,10 @@ func Find(text string) []Match {
 // dedupOverlapping collapses overlapping matches to one per underlying
 // span. Sorting by Start asc, End desc lets a single greedy walk keep
 // the leftmost-longest match and drop anything contained in or
-// touching it. The relative left-to-right order of surviving matches
-// is preserved.
+// overlapping it. Touching spans (m.Start == lastEnd) are kept: they
+// represent two distinct secrets concatenated without a separator,
+// and merging them would hide the second one. The relative
+// left-to-right order of surviving matches is preserved.
 func dedupOverlapping(matches []Match) []Match {
 	if len(matches) < 2 {
 		return matches
