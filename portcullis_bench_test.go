@@ -23,7 +23,7 @@ func BenchmarkRedactCleanInput(b *testing.B) {
 // keyword hit + regex match + cursor-rebuild redaction.
 func BenchmarkRedactWithSecret(b *testing.B) {
 	text := strings.Repeat("noise ", 100) +
-		"ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE" +
+		"ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr" +
 		strings.Repeat(" trailing", 100)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -52,7 +52,7 @@ func BenchmarkContainsCleanInput(b *testing.B) {
 // rest of the catalogue.
 func BenchmarkContainsWithSecret(b *testing.B) {
 	text := strings.Repeat("noise ", 100) +
-		"ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE" +
+		"ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr" +
 		strings.Repeat(" trailing", 100)
 	b.ReportAllocs()
 	b.ResetTimer()

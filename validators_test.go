@@ -18,12 +18,17 @@ func TestValidGitHubChecksum(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
-		"ghp_" + strings.Repeat("A", 30) + "1yBYBE",
-		"gho_" + strings.Repeat("B", 30) + "2EnKYh",
-		"ghu_" + strings.Repeat("C", 30) + "12Mf6L",
-		"ghs_" + strings.Repeat("D", 30) + "1fOFde",
-		"ghr_" + strings.Repeat("E", 30) + "0rAO3S",
-		"github_pat_" + strings.Repeat("a", 22) + "_" + strings.Repeat("b", 53) + "2ioKsE",
+		"ghp_" + strings.Repeat("A", 30) + "0uCPlr",
+		"gho_" + strings.Repeat("B", 30) + "1rpRcy",
+		"ghu_" + strings.Repeat("C", 30) + "48bxyY",
+		"ghs_" + strings.Repeat("D", 30) + "3g9sWQ",
+		"ghr_" + strings.Repeat("E", 30) + "1PNQIq",
+		"github_pat_" + strings.Repeat("a", 22) + "_" + strings.Repeat("b", 53) + "0pRc4Z",
+		// Real-world shape (synthetic body): the prefix is not part of
+		// the CRC32. Split across concatenation so the literal token
+		// never appears on a single source line (GitHub push protection
+		// would otherwise reject it).
+		"ghp_" + "PortcullisTestFixtureAaBbCcDdE" + "2xjo94",
 	}
 
 	for _, token := range cases {
@@ -36,6 +41,9 @@ func TestInvalidGitHubChecksum(t *testing.T) {
 
 	assert.False(t, validGitHubChecksum("ghp_"+strings.Repeat("a", 36)))
 	assert.False(t, validGitHubChecksum("github_pat_"+strings.Repeat("a", 22)+"_"+strings.Repeat("b", 59)))
+	assert.False(t, validGitHubChecksum("ghp_"+strings.Repeat("A", 30)+"1yBYBE")) // legacy fixture using prefix-included CRC32
+	assert.False(t, validGitHubChecksum("nope_"+strings.Repeat("A", 30)+"0uCPlr"))
+	assert.False(t, validGitHubChecksum("ghp_short"))
 }
 
 func TestValidJWT(t *testing.T) {

@@ -21,7 +21,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		name string
 		text string
 	}{
-		{"github_pat", "ghp_" + strings.Repeat("A", 30) + "1yBYBE"},
+		{"github_pat", "ghp_" + strings.Repeat("A", 30) + "0uCPlr"},
 		{"aws_access_key_id", "AKIA" + "RZPUZDIKQEXAMPLE"},
 		{"docker_pat", "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"},
 		{"docker_oat", "dckr_oat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"},
@@ -418,7 +418,7 @@ func TestContainsIgnoresHarmlessText(t *testing.T) {
 func TestRedactReplacesSecretSpan(t *testing.T) {
 	t.Parallel()
 
-	const ghp = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE"
+	const ghp = "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr"
 	in := "Run this with token=" + ghp + " and you're set"
 
 	out := portcullis.Redact(in)
@@ -464,8 +464,8 @@ func TestRedactPreservesNonMatchingText(t *testing.T) {
 func TestRedactHandlesMultipleSecretsInOneInput(t *testing.T) {
 	t.Parallel()
 
-	const a = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1yBYBE"
-	const b = "ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB1794Fj"
+	const a = "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr"
+	const b = "ghp_" + "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" + "1rpRcy"
 	in := "first " + a + " and second " + b + " end"
 
 	out := portcullis.Redact(in)
@@ -517,7 +517,7 @@ func TestRedactDetectsSecretsAcrossWordBoundaries(t *testing.T) {
 	// the verbatim token never appears on a single source line; that
 	// keeps secret-scanners (including ours) happy on the test file
 	// itself while still exercising the real ruleset.
-	ghp := "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE"
+	ghp := "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr"
 	awsAccessKey := "AKIA" + "RZPUZDIKQEXAMPLE"
 	dockerPAT := "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
@@ -577,7 +577,7 @@ func TestFindDeduplicatesOverlappingMatches(t *testing.T) {
 func TestFindKeepsDistinctSecrets(t *testing.T) {
 	t.Parallel()
 
-	a := "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE"
+	a := "ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr"
 	b := "dckr_pat_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	in := "first " + a + " then " + b
 
@@ -775,7 +775,7 @@ func TestCaseSensitiveRulesIgnoreLowercaseLookalikes(t *testing.T) {
 func TestFindBytesMatchesFind(t *testing.T) {
 	t.Parallel()
 
-	in := "prefix ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE" + " mid dckr_pat_" +
+	in := "prefix ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr" + " mid dckr_pat_" +
 		"AAAAAAAAAAAAAAAAAAAAAAAAAAA" + " suffix"
 
 	assert.Equal(t, portcullis.Find(in), portcullis.FindBytes([]byte(in)))
@@ -799,7 +799,7 @@ func TestContainsBytesMatchesContains(t *testing.T) {
 	cases := []string{
 		"",
 		"hello world",
-		"ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "1yBYBE",
+		"ghp_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "0uCPlr",
 	}
 	for _, in := range cases {
 		assert.Equalf(t, portcullis.Contains(in), portcullis.ContainsBytes([]byte(in)),

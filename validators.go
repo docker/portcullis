@@ -17,14 +17,28 @@ const (
 	bech32Alphabet    = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 )
 
+// validGitHubChecksum verifies a GitHub token's trailing 6-char base62
+// CRC32. GitHub computes the checksum over the random body that follows
+// the prefix (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, or `github_pat_`),
+// not over the prefix itself.
 func validGitHubChecksum(token string) bool {
-	if len(token) <= githubChecksumLen {
+	body, ok := stripGitHubPrefix(token)
+	if !ok || len(body) <= githubChecksumLen {
 		return false
 	}
+	provided := body[len(body)-githubChecksumLen:]
+	return provided == base62CRC32(body[:len(body)-githubChecksumLen])
+}
 
-	provided := token[len(token)-githubChecksumLen:]
-	checksumless := token[:len(token)-githubChecksumLen]
-	return provided == base62CRC32(checksumless)
+var gitHubTokenPrefixes = []string{"ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"}
+
+func stripGitHubPrefix(token string) (string, bool) {
+	for _, p := range gitHubTokenPrefixes {
+		if rest, ok := strings.CutPrefix(token, p); ok {
+			return rest, true
+		}
+	}
+	return "", false
 }
 
 func validJWT(token string) bool {
