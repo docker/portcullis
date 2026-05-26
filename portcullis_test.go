@@ -249,6 +249,17 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"flutterwave_live_secret", "FLWSECK-" + strings.Repeat("a", 32) + "-X"},
 		{"slack_workflow_webhook", "https://hooks.slack.com/workflows/T" + strings.Repeat("A", 10) + "/A" + strings.Repeat("B", 10) + "/" + strings.Repeat("1", 18) + "/" + strings.Repeat("a", 24)},
 		{"sourcegraph_cody_key", "slk_" + strings.Repeat("a", 64)},
+		// GitHub App stateless installation token (post-2026 rollout).
+		// `ghs_` prefix + JWT (header.payload.signature). Built at
+		// runtime so the literal token never sits on a single source
+		// line.
+		{
+			"github_app_stateless_token",
+			"ghs_" +
+				"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+				"eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ." +
+				"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -603,6 +614,18 @@ func TestGitHubTokensRequireChecksum(t *testing.T) {
 		assert.Falsef(t, portcullis.Contains(token), "invalid checksum must not match: %q", token)
 		assert.Equalf(t, token, portcullis.Redact(token), "invalid checksum must pass through: %q", token)
 	}
+}
+
+func TestGitHubStatelessTokenRequiresValidJWT(t *testing.T) {
+	t.Parallel()
+
+	// `ghs_eyXXX.eyYYY.ZZZ`-shaped string with non-JSON segments.
+	// The regex matches but the validator rejects, so the value must
+	// pass through untouched.
+	in := "ghs_eyAAAAAAAAAA.eyBBBBBBBBBB.CCCCCCCCCC"
+
+	assert.False(t, portcullis.Contains(in))
+	assert.Equal(t, in, portcullis.Redact(in))
 }
 
 func TestGitHubPlaceholderFalsePositive(t *testing.T) {

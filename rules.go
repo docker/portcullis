@@ -128,6 +128,19 @@ var rules = sync.OnceValue(func() []rule {
 			validator:  validGitHubChecksum,
 		},
 		{
+			// github-app-stateless-token. Per GitHub's 2026-05-15 changelog
+			// (`X-GitHub-Stateless-S2S-Token`), installation access tokens
+			// are migrating from the legacy opaque `ghs_<36 alnum>` shape to
+			// a stateless JWT carried under the same `ghs_` prefix. The
+			// validator decodes the JWT envelope (header / payload / signed)
+			// so this rule won't fire on arbitrary `ghs_eyXXX.eyYYY.ZZZ`-shaped
+			// strings that happen to match the regex.
+			expression:    `ghs_ey[A-Za-z0-9_-]{10,}\.ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`,
+			keywords:      []string{"ghs_ey"},
+			caseSensitive: true,
+			validator:     validGitHubStatelessToken,
+		},
+		{
 			// github-refresh-token
 			expression: asSecretGroup(`?P<secret>ghr_[0-9a-zA-Z]{36}`),
 			keywords:   []string{"ghr_"},

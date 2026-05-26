@@ -41,6 +41,17 @@ func stripGitHubPrefix(token string) (string, bool) {
 	return "", false
 }
 
+// validGitHubStatelessToken accepts the post-2026 stateless GitHub
+// App installation-token format: a `ghs_` prefix followed by a JWT.
+// The legacy stateful format (random body + base62 CRC32 trailer) is
+// still validated by [validGitHubChecksum] via the github-app-token
+// rule; this one covers the new shape that GitHub is rolling out per
+// their 2026 changelog (`X-GitHub-Stateless-S2S-Token`).
+func validGitHubStatelessToken(token string) bool {
+	rest, ok := strings.CutPrefix(token, "ghs_")
+	return ok && validJWT(rest)
+}
+
 func validJWT(token string) bool {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {

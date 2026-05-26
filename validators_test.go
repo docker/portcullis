@@ -46,6 +46,29 @@ func TestInvalidGitHubChecksum(t *testing.T) {
 	assert.False(t, validGitHubChecksum("ghp_short"))
 }
 
+func TestValidGitHubStatelessToken(t *testing.T) {
+	t.Parallel()
+
+	token := "ghs_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+		"eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ." +
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	assert.True(t, validGitHubStatelessToken(token))
+}
+
+func TestInvalidGitHubStatelessToken(t *testing.T) {
+	t.Parallel()
+
+	// Missing prefix.
+	assert.False(t, validGitHubStatelessToken("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"))
+	// Unsigned JWT (alg=none) — must be rejected by the inner validJWT.
+	unsigned := "ghs_eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0." +
+		"eyJzdWIiOiIxMjM0NTY3ODkwIn0." +
+		"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+	assert.False(t, validGitHubStatelessToken(unsigned))
+	// Not a JWT (header / payload aren't JSON).
+	assert.False(t, validGitHubStatelessToken("ghs_eyAAAAAAAAAA.eyBBBBBBBBBB.CCCCCCCCCC"))
+}
+
 func TestValidJWT(t *testing.T) {
 	t.Parallel()
 
