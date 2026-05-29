@@ -273,6 +273,42 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 	}
 }
 
+func TestHerokuLegacyAPIKeyMatchesAtStart(t *testing.T) {
+	t.Parallel()
+
+	in := `heroku_api_key="01234567-89AB-CDEF-0123-456789ABCDEF"`
+
+	assert.True(t, portcullis.Contains(in))
+	out := portcullis.Redact(in)
+	assert.Contains(t, out, "heroku_api_key=")
+	assert.NotContains(t, out, "01234567-89AB-CDEF-0123-456789ABCDEF")
+}
+
+func TestAWSAccessKeyIDPrefixes(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"AIDAQAAAAAAAQAAAAAAA",
+		"A3TAQAAAAAAAQAAAAAAA",
+	}
+	for _, token := range cases {
+		assert.Truef(t, portcullis.Contains(token), "must detect %s", token)
+		assert.Equal(t, portcullis.Marker, portcullis.Redact(token))
+	}
+}
+
+func TestRedactUsesDeduplicatedLongestSpans(t *testing.T) {
+	t.Parallel()
+
+	token := "glpat-" + strings.Repeat("A", 30) + ".abcdefghi"
+
+	assert.True(t, portcullis.Contains(token))
+	matches := portcullis.Find(token)
+	require.Len(t, matches, 1)
+	assert.Equal(t, token, matches[0].Value)
+	assert.Equal(t, portcullis.Marker, portcullis.Redact(token))
+}
+
 // TestRedactDetectsBareUnquotedSecrets exercises the rules whose
 // expressions used to require surrounding `'` / `"` characters
 // (copied from upstream Trivy, where the scanner is aimed at JSON /

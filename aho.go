@@ -110,10 +110,9 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 		s := queue[head]
 		fs := fail[s]
 		accept[s] = trie[s].terms
-		accept[s][0] |= accept[fs][0]
-		accept[s][1] |= accept[fs][1]
-		accept[s][2] |= accept[fs][2]
-		accept[s][3] |= accept[fs][3]
+		for i := range accept[s] {
+			accept[s][i] |= accept[fs][i]
+		}
 
 		base, fbase := s<<stateShift, fs<<stateShift
 		copy(next[base:base+256], next[fbase:fbase+256])

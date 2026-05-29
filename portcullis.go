@@ -154,69 +154,17 @@ func ContainsBytes(b []byte) bool {
 // Idempotent: [Marker] does not match any rule, so calling Redact
 // twice yields the same result. Safe for concurrent use.
 func Redact(text string) string {
-	if text == "" {
+	matches := Find(text)
+	if len(matches) == 0 {
 		return text
 	}
-	// One Aho–Corasick pass over the input gives us a mask of every
-	// keyword present, so each rule's keyword check collapses to two
-	// AND instructions. The mask is taken from the original input:
-	// redaction can only REMOVE keywords (Marker contains none — see
-	// TestMarkerIsNotASecret), so a stale "yes" after rewriting just
-	// means we run a regex that won't match.
-	rs := compiledRuleSet()
-	found := rs.ac.scan(text)
-	if found.empty() {
-		return text
-	}
-	out := text
-	for i := range rs.rules {
-		r := &rs.rules[i]
-		if !r.passes(found, out) {
-			continue
-		}
-		out = redactWithRule(r, out)
-	}
-	return out
-}
-
-// redactWithRule applies a single rule to text. We can't reach for
-// [regexp.Regexp.ReplaceAllStringFunc] because we need the match
-// indices to slice out the (?P<secret>…) subgroup while keeping the
-// rest of the match intact.
-func redactWithRule(r *compiledRule, text string) string {
-	compiled := r.compile()
-
-	// Probe for the first match before reaching for FindAll: that
-	// avoids allocating the outer [][]int wrapper when there is at
-	// most one hit (the overwhelmingly common case in real inputs).
-	m := nextValidMatch(compiled, text)
-	if m == nil {
-		return text
-	}
-	start, end := redactSpan(m, compiled.secretIdx)
-
-	// Fast path: a single match collapses to a 3-way string concat
-	// that allocates exactly the result buffer once. Probe the
-	// remainder for a second match before committing to it.
-	rest := nextValidMatch(compiled, text[end:])
-	if rest == nil {
-		return text[:start] + Marker + text[end:]
-	}
-
-	// Multi-match path: walk the rest of the input one match at a
-	// time, copying the in-between spans into a Builder.
 	var b strings.Builder
 	b.Grow(len(text))
-	b.WriteString(text[:start])
-	b.WriteString(Marker)
-	cursor := end
-	for m := rest; m != nil; m = nextValidMatch(compiled, text[cursor:]) {
-		s, e := redactSpan(m, compiled.secretIdx)
-		s += cursor
-		e += cursor
-		b.WriteString(text[cursor:s])
+	cursor := 0
+	for _, m := range matches {
+		b.WriteString(text[cursor:m.Start])
 		b.WriteString(Marker)
-		cursor = e
+		cursor = m.End
 	}
 	b.WriteString(text[cursor:])
 	return b.String()

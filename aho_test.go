@@ -84,6 +84,21 @@ func TestAhoCorasickOverlappingPatterns(t *testing.T) {
 	}
 }
 
+func TestAhoCorasickPropagatesAllKwMaskWords(t *testing.T) {
+	t.Parallel()
+
+	patterns := make([]string, 257)
+	for i := range 256 {
+		patterns[i] = string([]byte{'x', byte(i)})
+	}
+	patterns[256] = "bc"
+	patterns = append(patterns, "abc")
+
+	mask := buildAhoCorasick(patterns).scan("abc")
+
+	assert.NotZero(t, mask[4]&(1<<0), "suffix match at keyword index 256 must propagate through fail links")
+}
+
 // TestAhoCorasickPanicOnTooManyPatterns verifies that buildAhoCorasick
 // panics when given more than 320 patterns, which would overflow the
 // kwMask bitset.

@@ -99,8 +99,8 @@ var rules = sync.OnceValue(func() []rule {
 			// data, and crypto test vectors. The validator decodes the
 			// embedded 12-digit AWS account ID for modern access-key IDs,
 			// rejecting strings whose base32 body cannot encode one.
-			expression:    asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AidA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16})` + quote),
-			keywords:      []string{"AKIA", "AGPA", "AidA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA"},
+			expression:    asSecretGroup(`(?P<secret>(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16})` + quote),
+			keywords:      []string{"AKIA", "AGPA", "AIDA", "AROA", "AIPA", "ANPA", "ANVA", "ASIA", "A3T"},
 			caseSensitive: true,
 			validator:     validAWSAccessKeyID,
 		},
@@ -189,7 +189,7 @@ var rules = sync.OnceValue(func() []rule {
 		},
 		{
 			// heroku-api-key
-			expression: ` (?i)(?P<key>heroku[a-z0-9_ .\-,]{0,25})(=|>|:=|\|\|:|<=|=>|:).{0,5}['\"](?P<secret>[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})['\"]`,
+			expression: `(?i)(?P<key>heroku[a-z0-9_ .\-,]{0,25})(=|>|:=|\|\|:|<=|=>|:).{0,5}['\"](?P<secret>[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})['\"]`,
 			keywords:   []string{"heroku"},
 		},
 		{
