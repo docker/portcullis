@@ -1912,6 +1912,12 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `slk_[a-f0-9]{64}`,
 			keywords:   []string{"slk_"},
 		},
+		{
+			// daytona-api-key. Daytona API keys carry the `dtn_`
+			// prefix followed by a 64-character lowercase-hex body.
+			expression: `dtn_[a-f0-9]{64}`,
+			keywords:   []string{"dtn_"},
+		},
 	}
 })
 
