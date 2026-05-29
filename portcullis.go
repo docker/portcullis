@@ -33,6 +33,10 @@ type Match struct {
 // Find is safe for concurrent use. The returned slice is freshly
 // allocated and owned by the caller.
 func Find(text string) []Match {
+	return dedupOverlapping(findMatches(text))
+}
+
+func findMatches(text string) []Match {
 	if text == "" {
 		return nil
 	}
@@ -50,6 +54,9 @@ func Find(text string) []Match {
 		compiled := r.compile()
 		for _, m := range compiled.re.FindAllStringSubmatchIndex(text, -1) {
 			s, e := redactSpan(m, compiled.secretIdx)
+			if e <= s {
+				continue
+			}
 			value := text[s:e]
 			if compiled.validator != nil && !compiled.validator(value) {
 				continue
@@ -57,7 +64,7 @@ func Find(text string) []Match {
 			matches = append(matches, Match{Start: s, End: e, Value: value})
 		}
 	}
-	return dedupOverlapping(matches)
+	return matches
 }
 
 // dedupOverlapping collapses overlapping matches to one per underlying
@@ -154,7 +161,7 @@ func ContainsBytes(b []byte) bool {
 // Idempotent: [Marker] does not match any rule, so calling Redact
 // twice yields the same result. Safe for concurrent use.
 func Redact(text string) string {
-	matches := Find(text)
+	matches := mergeOverlapping(findMatches(text))
 	if len(matches) == 0 {
 		return text
 	}
@@ -170,28 +177,28 @@ func Redact(text string) string {
 	return b.String()
 }
 
-// nextValidMatch returns the first regex match whose secret span passes
-// the optional rule validator. Zero-length matches are skipped: they
-// don't correspond to a real secret, and accepting one would let
-// callers that advance by the match end loop forever.
-func nextValidMatch(compiled compiledMatch, text string) []int {
-	for offset := 0; offset < len(text); {
-		m := compiled.re.FindStringSubmatchIndex(text[offset:])
-		if m == nil {
-			return nil
-		}
-		for i := range m {
-			if m[i] >= 0 {
-				m[i] += offset
-			}
-		}
-		s, e := redactSpan(m, compiled.secretIdx)
-		if e > s && (compiled.validator == nil || compiled.validator(text[s:e])) {
-			return m
-		}
-		offset = max(e, offset+1)
+func mergeOverlapping(matches []Match) []Match {
+	if len(matches) < 2 {
+		return matches
 	}
-	return nil
+	slices.SortFunc(matches, func(a, b Match) int {
+		if a.Start != b.Start {
+			return a.Start - b.Start
+		}
+		return b.End - a.End
+	})
+	out := matches[:0]
+	for _, m := range matches {
+		if len(out) == 0 || m.Start >= out[len(out)-1].End {
+			out = append(out, m)
+			continue
+		}
+		if m.End > out[len(out)-1].End {
+			out[len(out)-1].End = m.End
+			out[len(out)-1].Value = ""
+		}
+	}
+	return out
 }
 
 // redactSpan returns the [start, end) byte offsets that should be
