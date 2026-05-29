@@ -249,6 +249,7 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"flutterwave_live_secret", "FLWSECK-" + strings.Repeat("a", 32) + "-X"},
 		{"slack_workflow_webhook", "https://hooks.slack.com/workflows/T" + strings.Repeat("A", 10) + "/A" + strings.Repeat("B", 10) + "/" + strings.Repeat("1", 18) + "/" + strings.Repeat("a", 24)},
 		{"sourcegraph_cody_key", "slk_" + strings.Repeat("a", 64)},
+		{"daytona_api_key", "dtn_" + strings.Repeat("a", 64)},
 		// GitHub App stateless installation token (post-2026 rollout).
 		// `ghs_` prefix + JWT (header.payload.signature). Built at
 		// runtime so the literal token never sits on a single source
