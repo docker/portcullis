@@ -1918,6 +1918,13 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `dtn_[a-f0-9]{64}`,
 			keywords:   []string{"dtn_"},
 		},
+		{
+			// blaxel-api-key. Blaxel API keys carry the `bl_`
+			// prefix followed by a 32-character lowercase
+			// alphanumeric body.
+			expression: `bl_[a-z0-9]{32}`,
+			keywords:   []string{"bl_"},
+		},
 	}
 })
 
