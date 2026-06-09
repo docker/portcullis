@@ -133,6 +133,10 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 		return scanFile(root, root, maxSize, scanBinary, out, errOut)
 	}
 
+	// Workers and the walker write diagnostics concurrently; plain
+	// io.Writers are not safe for that.
+	errOut = &syncWriter{w: errOut}
+
 	type job struct {
 		seq  int
 		path string
@@ -232,6 +236,19 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 		}
 	}
 	return found, <-walkErrCh
+}
+
+// syncWriter serializes writes to an io.Writer shared by several
+// goroutines.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
 }
 
 // scanFile is the single-file fast path used when the CLI target is
