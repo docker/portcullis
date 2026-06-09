@@ -35,7 +35,8 @@
 //
 //	0  scan completed; no secrets found.
 //	1  scan completed; at least one secret was found.
-//	2  invocation error (bad flags, unreadable root, etc.).
+//	2  invocation error (bad flags, unreadable root, etc.) or one
+//	   or more files could not be read.
 package main
 
 import (
@@ -49,6 +50,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/docker/portcullis"
 )
@@ -130,7 +132,7 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 
 	// Single-file target: no need to spin up the pool.
 	if !info.IsDir() {
-		return scanFile(root, root, maxSize, scanBinary, out, errOut)
+		return scanFile(root, root, maxSize, scanBinary, out)
 	}
 
 	// Workers and the walker write diagnostics concurrently; plain
@@ -149,11 +151,21 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 	jobs := make(chan job, workers*4)
 	results := make(chan result, workers*4)
 
+	// Files that could not be read are logged and counted; a
+	// non-zero count fails the scan so a permission problem can't
+	// masquerade as a clean result.
+	var readErrs atomic.Int64
+
 	var wg sync.WaitGroup
 	for range workers {
 		wg.Go(func() {
 			for j := range jobs {
-				results <- result{seq: j.seq, buf: scanFileBytes(j.path, root, maxSize, scanBinary, errOut)}
+				buf, err := scanFileBytes(j.path, root, maxSize, scanBinary)
+				if err != nil {
+					fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", j.path, err)
+					readErrs.Add(1)
+				}
+				results <- result{seq: j.seq, buf: buf}
 			}
 		})
 	}
@@ -167,6 +179,7 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 		walkErrCh <- filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, err)
+				readErrs.Add(1)
 				if d != nil && d.IsDir() {
 					return filepath.SkipDir
 				}
@@ -235,7 +248,18 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 			nextSeq++
 		}
 	}
-	return found, <-walkErrCh
+	return found, scanErr(<-walkErrCh, readErrs.Load())
+}
+
+// scanErr converts walk/read failures into the scan's return error.
+func scanErr(walkErr error, readErrs int64) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	if readErrs > 0 {
+		return fmt.Errorf("%d file(s) could not be read", readErrs)
+	}
+	return nil
 }
 
 // syncWriter serializes writes to an io.Writer shared by several
@@ -253,12 +277,15 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 
 // scanFile is the single-file fast path used when the CLI target is
 // a file rather than a directory.
-func scanFile(path, root string, maxSize int64, scanBinary bool, out, errOut io.Writer) (bool, error) {
-	buf := scanFileBytes(path, root, maxSize, scanBinary, errOut)
+func scanFile(path, root string, maxSize int64, scanBinary bool, out io.Writer) (bool, error) {
+	buf, err := scanFileBytes(path, root, maxSize, scanBinary)
+	if err != nil {
+		return false, err
+	}
 	if buf == nil {
 		return false, nil
 	}
-	_, err := out.Write(buf)
+	_, err = out.Write(buf)
 	return true, err
 }
 
@@ -266,18 +293,17 @@ func scanFile(path, root string, maxSize int64, scanBinary bool, out, errOut io.
 // and returns a pre-formatted output chunk (one `path:line:col: value`
 // line per match, all in one allocation). It returns nil if there
 // are no matches or the file was skipped.
-func scanFileBytes(path, root string, maxSize int64, scanBinary bool, errOut io.Writer) []byte {
+func scanFileBytes(path, root string, maxSize int64, scanBinary bool) ([]byte, error) {
 	data, ok, err := readIfScannable(path, maxSize, scanBinary)
 	if err != nil {
-		fmt.Fprintf(errOut, "portcullis-scan: %s: %v\n", path, err)
-		return nil
+		return nil, err
 	}
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	matches := portcullis.FindBytes(data)
 	if len(matches) == 0 {
-		return nil
+		return nil, nil
 	}
 	display := path
 	if rel, relErr := filepath.Rel(root, path); relErr == nil && rel != "." {
@@ -288,7 +314,7 @@ func scanFileBytes(path, root string, maxSize int64, scanBinary bool, errOut io.
 		line, col := lineCol(data, m.Start)
 		fmt.Fprintf(&b, "%s:%d:%d: %s\n", display, line, col, sanitizeValue(m.Value))
 	}
-	return []byte(b.String())
+	return []byte(b.String()), nil
 }
 
 // readIfScannable reads path's contents, skipping it if it exceeds

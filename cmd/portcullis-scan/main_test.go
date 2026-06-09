@@ -105,6 +105,24 @@ func TestRunReportsMissingRoot(t *testing.T) {
 	assert.Contains(t, stderr.String(), "portcullis-scan:")
 }
 
+func TestRunFailsWhenAFileCannotBeRead(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("root can read anything")
+	}
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "clean.txt"), []byte("nothing to see"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "locked.txt"), []byte("secret?"), 0o000))
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{root}, &stdout, &stderr)
+
+	assert.Equal(t, exitInvalid, code)
+	assert.Contains(t, stderr.String(), "locked.txt")
+	assert.Contains(t, stderr.String(), "could not be read")
+}
+
 func TestRunSanitisesMultilineSecrets(t *testing.T) {
 	t.Parallel()
 
