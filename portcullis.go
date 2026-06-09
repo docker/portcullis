@@ -68,12 +68,14 @@ func findMatches(text string) []Match {
 }
 
 // dedupOverlapping collapses overlapping matches to one per underlying
-// span. Sorting by Start asc, End desc lets a single greedy walk keep
-// the leftmost-longest match and drop anything contained in or
-// overlapping it. Touching spans (m.Start == lastEnd) are kept: they
-// represent two distinct secrets concatenated without a separator,
-// and merging them would hide the second one. The relative
-// left-to-right order of surviving matches is preserved.
+// span, keeping the longest. After sorting by Start asc, End desc, a
+// greedy walk drops anything contained in the last kept match, and a
+// later-starting match that overlaps the last kept one replaces it
+// when it is longer (unless that would also swallow the match before
+// it). Touching spans (m.Start == lastEnd) are kept: they represent
+// two distinct secrets concatenated without a separator, and merging
+// them would hide the second one. The relative left-to-right order of
+// surviving matches is preserved.
 func dedupOverlapping(matches []Match) []Match {
 	if len(matches) < 2 {
 		return matches
@@ -85,13 +87,16 @@ func dedupOverlapping(matches []Match) []Match {
 		return b.End - a.End
 	})
 	out := matches[:0]
-	lastEnd := -1
 	for _, m := range matches {
-		if m.Start < lastEnd {
+		if len(out) == 0 || m.Start >= out[len(out)-1].End {
+			out = append(out, m)
 			continue
 		}
-		out = append(out, m)
-		lastEnd = m.End
+		last := out[len(out)-1]
+		if m.End-m.Start > last.End-last.Start &&
+			(len(out) == 1 || m.Start >= out[len(out)-2].End) {
+			out[len(out)-1] = m
+		}
 	}
 	return out
 }
