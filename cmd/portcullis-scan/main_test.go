@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,6 +178,31 @@ func TestRunBinaryFlagOptsIn(t *testing.T) {
 	assert.Equal(t, exitFound, code)
 	assert.Empty(t, stderr.String())
 	assert.Contains(t, stdout.String(), "data.bin")
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
+
+func TestRunReturnsErrorWhenOutputWriteFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, name+".env"),
+			[]byte("TOKEN="+githubPAT+"\n"),
+			0o644,
+		))
+	}
+
+	var stderr bytes.Buffer
+	code := run([]string{root}, failingWriter{}, &stderr)
+
+	assert.Equal(t, exitInvalid, code)
+	assert.Contains(t, stderr.String(), "write failed")
 }
 
 // TestRunOutputIsDeterministic pins the contract that two runs over

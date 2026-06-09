@@ -215,26 +215,31 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 	// Collector: emit chunks in walker (sequence) order. Out-of-order
 	// results are stashed in a small reorder buffer keyed by seq;
 	// each contiguous run is flushed as soon as the missing prefix
-	// arrives.
+	// arrives. On a write error we keep draining results — returning
+	// early would leave the walker and workers blocked on full
+	// channels — and report the first error once everything exits.
 	pending := make(map[int][]byte)
 	nextSeq := 0
 	var found bool
-	write := func(buf []byte) error {
+	var writeErr error
+	write := func(buf []byte) {
 		if len(buf) == 0 {
-			return nil
+			return
 		}
 		found = true
-		_, err := out.Write(buf)
-		return err
+		if writeErr != nil {
+			return
+		}
+		if _, err := out.Write(buf); err != nil {
+			writeErr = err
+		}
 	}
 	for r := range results {
 		if r.seq != nextSeq {
 			pending[r.seq] = r.buf
 			continue
 		}
-		if err := write(r.buf); err != nil {
-			return found, err
-		}
+		write(r.buf)
 		nextSeq++
 		for {
 			buf, ok := pending[nextSeq]
@@ -242,13 +247,15 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 				break
 			}
 			delete(pending, nextSeq)
-			if err := write(buf); err != nil {
-				return found, err
-			}
+			write(buf)
 			nextSeq++
 		}
 	}
-	return found, scanErr(<-walkErrCh, readErrs.Load())
+	walkErr := <-walkErrCh
+	if writeErr != nil {
+		return found, writeErr
+	}
+	return found, scanErr(walkErr, readErrs.Load())
 }
 
 // scanErr converts walk/read failures into the scan's return error.
