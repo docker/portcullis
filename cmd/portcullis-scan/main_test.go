@@ -124,6 +124,23 @@ func TestRunFailsWhenAFileCannotBeRead(t *testing.T) {
 	assert.Contains(t, stderr.String(), "could not be read")
 }
 
+func TestRunFollowsRootSymlinkToDirectory(t *testing.T) {
+	t.Parallel()
+
+	target := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(target, "leaky.env"), []byte("TOKEN="+githubPAT+"\n"), 0o644))
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(target, link))
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{link}, &stdout, &stderr)
+
+	assert.Equal(t, exitFound, code)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "leaky.env:1:7: "+githubPAT)
+}
+
 func TestRunSanitisesMultilineSecrets(t *testing.T) {
 	t.Parallel()
 

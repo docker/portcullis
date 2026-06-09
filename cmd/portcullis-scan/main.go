@@ -135,6 +135,17 @@ func scan(root string, maxSize int64, workers int, scanBinary bool, ignore *igno
 		return scanFile(root, root, maxSize, scanBinary, out)
 	}
 
+	// WalkDir does not follow a root that is itself a symlink;
+	// resolve it so `portcullis-scan link-to-dir` scans the target
+	// tree instead of silently scanning nothing.
+	if lst, err := os.Lstat(root); err == nil && lst.Mode()&os.ModeSymlink != 0 {
+		resolved, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			return false, err
+		}
+		root = resolved
+	}
+
 	// Workers and the walker write diagnostics concurrently; plain
 	// io.Writers are not safe for that.
 	errOut = &syncWriter{w: errOut}
