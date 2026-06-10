@@ -1,6 +1,8 @@
 package portcullis
 
 import (
+	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,6 +119,60 @@ func TestAhoCorasickPanicOnTooManyPatterns(t *testing.T) {
 
 	assert.PanicsWithValue(t, "portcullis: too many AC patterns for kwMask",
 		func() { buildAhoCorasick(patterns) })
+}
+
+// TestAhoScanShardedMatchesSerial guards the sharded scan against
+// the serial reference: both must report the same keyword set on
+// randomized inputs long enough to take the sharded path, including
+// keywords planted to straddle shard boundaries.
+func TestAhoScanShardedMatchesSerial(t *testing.T) {
+	t.Parallel()
+
+	rs := compiledRuleSet()
+	rng := rand.New(rand.NewSource(42))
+	keywords := []string{"ghp_", "aws", "secret-live-", "token", "sb_secret_", "-----begin"}
+	alphabet := "abcdefghijklmnopqrstuvwxyz ._-=:"
+
+	for range 200 {
+		n := shardedScanMin + rng.Intn(4096)
+		buf := make([]byte, n)
+		for i := range buf {
+			buf[i] = alphabet[rng.Intn(len(alphabet))]
+		}
+		// Plant keywords at random offsets, plus one straddling a few
+		// shard boundaries.
+		size := (n + 7) / 8
+		for _, pos := range []int{rng.Intn(n), size - 2, 3*size - 2, 5*size - 2, 7*size - 2} {
+			kw := keywords[rng.Intn(len(keywords))]
+			if pos+len(kw) <= n {
+				copy(buf[pos:], kw)
+			}
+		}
+		text := string(buf)
+
+		assert.Equal(t, rs.ac.scanSerial(text), rs.ac.scanSharded(text), "input: %q", text)
+	}
+}
+
+// TestAhoScanShardedBoundarySpanningKeyword pins the overlap
+// arithmetic: the longest keyword placed to straddle every shard
+// boundary must still be detected by the sharded scan.
+func TestAhoScanShardedBoundarySpanningKeyword(t *testing.T) {
+	t.Parallel()
+
+	patterns := []string{"boundary-keyword"}
+	ac := buildAhoCorasick(patterns)
+
+	n := shardedScanMin * 2
+	size := (n + 7) / 8
+	for boundary := size; boundary < n; boundary += size {
+		for shift := 1; shift < len(patterns[0]); shift++ {
+			buf := []byte(strings.Repeat(".", n))
+			copy(buf[boundary-shift:], patterns[0])
+			mask := ac.scan(string(buf))
+			assert.Falsef(t, mask.empty(), "keyword spanning boundary %d at shift %d must be found", boundary, shift)
+		}
+	}
 }
 
 // TestEveryRuleCompiles is a catalogue-hygiene guard: every rule's

@@ -13,6 +13,13 @@ func (m *kwMask) overlaps(other kwMask) bool {
 	return m[0]&other[0]|m[1]&other[1]|m[2]&other[2]|m[3]&other[3]|m[4]&other[4] != 0
 }
 func (m *kwMask) set(idx int) { m[idx>>6] |= 1 << uint(idx&63) }
+func (m *kwMask) orIn(other *kwMask) {
+	m[0] |= other[0]
+	m[1] |= other[1]
+	m[2] |= other[2]
+	m[3] |= other[3]
+	m[4] |= other[4]
+}
 
 // acceptBit is set in a [acAutomaton.next] cell when the destination
 // state has at least one accepting pattern (directly or via fail
@@ -56,6 +63,11 @@ type acAutomaton struct {
 	// for the ~10% of bytes whose transition has [acceptBit] set,
 	// so on real-world inputs accept[] effectively stays cold.
 	accept []kwMask
+	// overlap is the longest pattern length minus one: the number of
+	// bytes two adjacent shards must share so that a pattern spanning
+	// the shard boundary is still seen in full by the left shard's
+	// cursor (see [acAutomaton.scanSharded]).
+	overlap int
 }
 
 // buildAhoCorasick compiles patterns into an automaton. Patterns
@@ -153,14 +165,35 @@ func buildAhoCorasick(patterns []string) *acAutomaton {
 		}
 	}
 
-	return &acAutomaton{next: next, accept: accept}
+	maxLen := 0
+	for _, p := range patterns {
+		maxLen = max(maxLen, len(p))
+	}
+
+	return &acAutomaton{next: next, accept: accept, overlap: maxLen - 1}
 }
+
+// shardedScanMin is the input length below which [acAutomaton.scan]
+// stays on the serial loop: below it the per-shard overlap and tail
+// bookkeeping costs more than the extra instruction-level
+// parallelism buys.
+const shardedScanMin = 1024
 
 // scan returns a kwMask of every pattern that occurs at least once
 // in text. ASCII case-folding is handled by the transition table
 // itself (see [buildAhoCorasick]) so the scan loop never has to
 // touch the input byte before indexing.
-func (a *acAutomaton) scan(text string) (mask kwMask) {
+func (a *acAutomaton) scan(text string) kwMask {
+	if len(text) >= shardedScanMin {
+		return a.scanSharded(text)
+	}
+	return a.scanSerial(text)
+}
+
+// scanSerial walks the whole input with a single cursor. It is the
+// fastest option for short inputs, where its root-skip fast loop
+// shines and sharding overhead would dominate.
+func (a *acAutomaton) scanSerial(text string) (mask kwMask) {
 	// Hoist slice headers into locals so the compiler can prove the
 	// (state, byte) index is in range once at function entry rather
 	// than re-checking inside the hot loop.
@@ -216,4 +249,95 @@ func (a *acAutomaton) scan(text string) (mask kwMask) {
 		}
 	}
 	return mask
+}
+
+// scanSharded splits the input into eight shards and advances eight
+// independent automaton cursors in lockstep inside one loop. A
+// single cursor is latency-bound: each byte's table lookup depends
+// on the state produced by the previous lookup, so the CPU stalls
+// for the full load latency on every byte. Eight interleaved
+// dependency chains let those loads overlap, lifting throughput
+// well past the serial loop on inputs long enough to amortise the
+// setup (see [shardedScanMin]).
+//
+// Adjacent shards overlap by [acAutomaton.overlap] bytes (longest
+// pattern minus one) so a pattern spanning a shard boundary is still
+// fully traversed by the left shard's cursor. Duplicated hits are
+// harmless: the result is a set union.
+//
+// The hot loop carries no accept bookkeeping at all: on any accept
+// hit it breaks out, lets the cold block below OR in the accept
+// masks, and resumes. accept[s] is empty for every non-accepting
+// state, so blindly OR-ing all eight cursors' entries there is a
+// no-op for the cursors that didn't hit. Keeping the loop body down
+// to eight loads plus register-only ALU ops is what lets the eight
+// chains actually retire one byte per chain per load-latency window;
+// an in-loop branch ladder costs enough spills to halve the win.
+func (a *acAutomaton) scanSharded(text string) (mask kwMask) {
+	next, accept := a.next, a.accept
+	n := len(text)
+	size := (n + 7) / 8
+	ov := a.overlap
+
+	// All eight cursors advance one byte per iteration; run until the
+	// shortest shard (the last one) is exhausted, then let scanFrom
+	// finish the leftover tails (a few dozen bytes each) serially.
+	steps := min(n-7*size, size+ov)
+
+	s2, s3, s4, s5, s6, s7 := 2*size, 3*size, 4*size, 5*size, 6*size, 7*size
+	var o0, o1, o2, o3, o4, o5, o6, o7 uint32
+	k := 0
+	for k < steps {
+		for k < steps {
+			r0 := next[o0+uint32(text[k])]
+			r1 := next[o1+uint32(text[k+size])]
+			r2 := next[o2+uint32(text[k+s2])]
+			r3 := next[o3+uint32(text[k+s3])]
+			r4 := next[o4+uint32(text[k+s4])]
+			r5 := next[o5+uint32(text[k+s5])]
+			r6 := next[o6+uint32(text[k+s6])]
+			r7 := next[o7+uint32(text[k+s7])]
+			o0, o1, o2, o3 = r0&^acceptBit, r1&^acceptBit, r2&^acceptBit, r3&^acceptBit
+			o4, o5, o6, o7 = r4&^acceptBit, r5&^acceptBit, r6&^acceptBit, r7&^acceptBit
+			k++
+			if (r0|r1|r2|r3|r4|r5|r6|r7)&acceptBit != 0 {
+				break
+			}
+		}
+		// Cold path: at least one cursor sits on an accepting state.
+		// accept[] is empty for the others, so no per-cursor test is
+		// needed.
+		mask.orIn(&accept[o0>>stateShift])
+		mask.orIn(&accept[o1>>stateShift])
+		mask.orIn(&accept[o2>>stateShift])
+		mask.orIn(&accept[o3>>stateShift])
+		mask.orIn(&accept[o4>>stateShift])
+		mask.orIn(&accept[o5>>stateShift])
+		mask.orIn(&accept[o6>>stateShift])
+		mask.orIn(&accept[o7>>stateShift])
+	}
+
+	a.scanFrom(o0, text, k, min(size+ov, n), &mask)
+	a.scanFrom(o1, text, size+k, min(s2+ov, n), &mask)
+	a.scanFrom(o2, text, s2+k, min(s3+ov, n), &mask)
+	a.scanFrom(o3, text, s3+k, min(s4+ov, n), &mask)
+	a.scanFrom(o4, text, s4+k, min(s5+ov, n), &mask)
+	a.scanFrom(o5, text, s5+k, min(s6+ov, n), &mask)
+	a.scanFrom(o6, text, s6+k, min(s7+ov, n), &mask)
+	a.scanFrom(o7, text, s7+k, n, &mask)
+	return mask
+}
+
+// scanFrom continues a scan from state offset off over
+// text[i:limit], OR-ing accept hits into mask. Used for the short
+// shard tails left over by [acAutomaton.scanSharded].
+func (a *acAutomaton) scanFrom(off uint32, text string, i, limit int, mask *kwMask) {
+	next, accept := a.next, a.accept
+	for ; i < limit; i++ {
+		raw := next[off+uint32(text[i])]
+		off = raw &^ acceptBit
+		if raw&acceptBit != 0 {
+			mask.orIn(&accept[off>>stateShift])
+		}
+	}
 }
