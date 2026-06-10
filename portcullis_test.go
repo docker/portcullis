@@ -251,6 +251,12 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"sourcegraph_cody_key", "slk_" + strings.Repeat("a", 64)},
 		{"daytona_api_key", "dtn_" + strings.Repeat("a", 64)},
 		{"blaxel_api_key", "bl_" + strings.Repeat("a", 32)},
+		// Tenth batch — prefix-anchored vendor tokens.
+		{"square_personal_access_token", "sq0atp-" + strings.Repeat("a", 22)},
+		{"square_oauth_secret", "sq0csp-" + strings.Repeat("a", 43)},
+		{"octopus_deploy_api_key", "API-" + strings.Repeat("A", 26)},
+		{"stytch_live_secret", "secret-live-" + strings.Repeat("a", 43) + "="},
+		{"stytch_test_secret", "secret-test-" + strings.Repeat("a", 43) + "="},
 		// GitHub App stateless installation token (post-2026 rollout).
 		// `ghs_` prefix + JWT (header.payload.signature). Built at
 		// runtime so the literal token never sits on a single source
@@ -817,6 +823,9 @@ func TestCaseSensitiveRulesIgnoreLowercaseLookalikes(t *testing.T) {
 		// Fly.io macaroon: kw `FlyV1 fm2_`. Lowercase variant common
 		// in normal text.
 		{"flyio_lowercase", "flyv1 fm2_" + strings.Repeat("a", 80)},
+		// Octopus Deploy: kw `API-`. Lowercase `api-` is everywhere in
+		// prose and identifiers.
+		{"octopus_lowercase", "api-" + strings.Repeat("A", 26)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
