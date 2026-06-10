@@ -57,7 +57,7 @@ across goroutines.
 
 ## What it detects
 
-The built-in catalogue covers ~245 patterns spanning:
+The built-in catalogue covers ~235 patterns spanning:
 
 - Cloud providers — AWS, GCP service accounts, Azure Storage,
   Azure AD client secrets, DigitalOcean, Yandex,

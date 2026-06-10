@@ -1932,7 +1932,7 @@ var rules = sync.OnceValue(func() []rule {
 // folded into a [kwMask] over the catalogue's shared keyword index,
 // and its regex is compiled lazily on first match. A clean input —
 // the overwhelmingly common case — therefore never pays for
-// compiling any of the ~175 expressions in the catalogue, only for
+// compiling any of the ~235 expressions in the catalogue, only for
 // the keyword bitset and the AC table.
 //
 // caseSensitive, when true, requires the post-filter step (see
