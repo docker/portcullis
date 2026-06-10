@@ -1925,6 +1925,39 @@ var rules = sync.OnceValue(func() []rule {
 			expression: `bl_[a-z0-9]{32}`,
 			keywords:   []string{"bl_"},
 		},
+
+		// --- Tenth batch: prefix-anchored vendor tokens cross-checked
+		// against gitleaks and TruffleHog. Selected for unique prefixes
+		// only — formats removed in the past for false positives
+		// (PyPI `pypi-…`, Azure DevOps / NuGet `oy2…`, Square `EAAA…`,
+		// Adyen `AQE…`) were deliberately NOT re-added.
+
+		{
+			// square-oauth-credentials. Square personal access tokens
+			// (`sq0atp-<22>`) and OAuth application secrets
+			// (`sq0csp-<43>`) carry distinctive `sq0` prefixes — unlike
+			// the bare-base64 `EAAA` access-token form that was removed
+			// for false positives.
+			expression: `sq0(?:atp-[0-9A-Za-z_-]{22}|csp-[0-9A-Za-z_-]{43})`,
+			keywords:   []string{"sq0atp-", "sq0csp-"},
+		},
+		{
+			// octopus-deploy-api-key. Octopus Deploy API keys are shaped
+			// `API-<26-30 uppercase alnum>`. The case-sensitive keyword
+			// keeps the common lowercase `api-` prose prefix from
+			// reaching the regex.
+			expression:    `API-[A-Z0-9]{26,30}`,
+			keywords:      []string{"API-"},
+			caseSensitive: true,
+		},
+		{
+			// stytch-secret. Stytch (auth platform) project secrets are
+			// shaped `secret-(live|test)-<~44 base64url chars incl. `=`
+			// padding>`; the environment-tagged prefix is unique to the
+			// product.
+			expression: `secret-(?:live|test)-[A-Za-z0-9_=-]{40,50}`,
+			keywords:   []string{"secret-live-", "secret-test-"},
+		},
 	}
 })
 
@@ -1932,7 +1965,7 @@ var rules = sync.OnceValue(func() []rule {
 // folded into a [kwMask] over the catalogue's shared keyword index,
 // and its regex is compiled lazily on first match. A clean input —
 // the overwhelmingly common case — therefore never pays for
-// compiling any of the ~235 expressions in the catalogue, only for
+// compiling any of the ~240 expressions in the catalogue, only for
 // the keyword bitset and the AC table.
 //
 // caseSensitive, when true, requires the post-filter step (see

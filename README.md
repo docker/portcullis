@@ -57,7 +57,7 @@ across goroutines.
 
 ## What it detects
 
-The built-in catalogue covers ~235 patterns spanning:
+The built-in catalogue covers ~240 patterns spanning:
 
 - Cloud providers — AWS, GCP service accounts, Azure Storage,
   Azure AD client secrets, DigitalOcean, Yandex,
@@ -73,7 +73,8 @@ The built-in catalogue covers ~235 patterns spanning:
   AssemblyAI, Deepgram, NVIDIA NIM (`nvapi-`),
   LangSmith (`lsv2_pt_` / `lsv2_sk_`), Pinecone (`pcsk_`).
 - Payment processors — Stripe (secret / restricted /
-  webhook), Razorpay, Plaid, Braintree.
+  webhook), Razorpay, Plaid, Square (`sq0atp-` / `sq0csp-`),
+  Braintree.
 - Communication & ops — Slack (legacy, rotating, webhooks,
   workflow webhooks), Discord (bot & webhook), Telegram, Twilio,
   SendGrid, Mailgun, Mailchimp, Sendinblue, Microsoft Teams
@@ -85,7 +86,7 @@ The built-in catalogue covers ~235 patterns spanning:
   OpenShift `sha256~` tokens, Voiceflow, Deno Deploy, Bitbucket
   app passwords (`ATBB`), CircleCI v2 (`CCIPAT_`), Endor Labs,
   Rootly, Sourcegraph Cody, Stripe payment-intent client secrets,
-  Nightfall DLP, Ramp.
+  Nightfall DLP, Ramp, Octopus Deploy, Stytch.
 - Infra, web3 & databases — HashiCorp Vault (service / batch /
   recovery), Terraform Cloud, Tailscale, PlanetScale, Supabase,
   MongoDB / Postgres / MySQL / Redis / AMQP connection-string
