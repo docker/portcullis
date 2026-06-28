@@ -169,6 +169,70 @@ func TestInvalidAWSBedrockLongLivedKey(t *testing.T) {
 	assert.False(t, validAWSBedrockLongLivedKey("ABSK"+strings.Repeat("A", 128)))
 }
 
+func TestValidLuhn(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{
+		"4111 1111 1111 1111",
+		"5555-5555-5555-4444",
+		"3782 822463 10005",
+	} {
+		assert.Truef(t, validLuhn(value), "%q should pass Luhn", value)
+	}
+}
+
+func TestInvalidLuhn(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{
+		"4111 1111 1111 1112",
+		"1234567890123456",
+		"424242",
+	} {
+		assert.Falsef(t, validLuhn(value), "%q should fail Luhn", value)
+	}
+}
+
+func TestValidIBANMod97(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{
+		"GB82 WEST 1234 5698 7654 32",
+		"DE89 3704 0044 0532 0130 00",
+		"FR14 2004 1010 0505 0001 3M02 606",
+	} {
+		assert.Truef(t, validIBANMod97(value), "%q should pass mod-97", value)
+	}
+}
+
+func TestInvalidIBANMod97(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{
+		"GB82 TEST 1234 5698 7654 32",
+		"DE89 3704 0044 0532 0130 01",
+		"not an iban",
+	} {
+		assert.Falsef(t, validIBANMod97(value), "%q should fail mod-97", value)
+	}
+}
+
+func TestValidUSSSN(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, validUSSSN("123-45-6789"))
+	assert.True(t, validUSSSN("123 45 6789"))
+	assert.True(t, validUSSSN("123456789"))
+}
+
+func TestInvalidUSSSN(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"000-45-6789", "666-45-6789", "900-45-6789", "123-00-6789", "123-45-0000"} {
+		assert.Falsef(t, validUSSSN(value), "%q should be rejected", value)
+	}
+}
+
 func TestValidAWSAccessKeyID(t *testing.T) {
 	t.Parallel()
 

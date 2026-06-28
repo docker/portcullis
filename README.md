@@ -87,12 +87,13 @@ The built-in catalogue covers ~240 patterns spanning:
   app passwords (`ATBB`), CircleCI v2 (`CCIPAT_`), Endor Labs,
   Rootly, Sourcegraph Cody, Stripe payment-intent client secrets,
   Nightfall DLP, Ramp, Octopus Deploy, Stytch.
-- Infra, web3 & databases — HashiCorp Vault (service / batch /
+- Infra, web3, databases & PII — HashiCorp Vault (service / batch /
   recovery), Terraform Cloud, Tailscale, PlanetScale, Supabase,
   MongoDB / Postgres / MySQL / Redis / AMQP connection-string
   passwords, Sidekiq Pro/Enterprise gem-server URLs,
-  Alchemy / Etherscan / Moralis (web3), Logz.io,
-  PEM private keys, JWTs, and more.
+  Alchemy / Etherscan / Moralis (web3), payment cards (Luhn-checked),
+  IBANs (mod-97-checked), US SSNs, Logz.io, PEM private keys, JWTs,
+  and more.
 
 Connection-string rules (MongoDB, Postgres, MySQL, Redis, AMQP, Azure
 Storage) redact only the password / key span so log readers can still

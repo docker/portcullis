@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -229,6 +230,71 @@ func validAWSBedrockLongLivedKey(token string) bool {
 		return false
 	}
 	return strings.HasPrefix(string(decoded), "BedrockAPIKey-")
+}
+
+func validLuhn(value string) bool {
+	var digits []int
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			digits = append(digits, int(r-'0'))
+		}
+	}
+	if len(digits) < 13 || len(digits) > 19 {
+		return false
+	}
+	total := 0
+	for i := range digits {
+		d := digits[len(digits)-1-i]
+		if i%2 == 1 {
+			d *= 2
+			if d > 9 {
+				d -= 9
+			}
+		}
+		total += d
+	}
+	return total%10 == 0
+}
+
+func validIBANMod97(value string) bool {
+	s := strings.ToUpper(strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, value))
+	if len(s) < 15 || len(s) > 34 {
+		return false
+	}
+
+	mod := 0
+	for _, r := range s[4:] + s[:4] {
+		switch {
+		case r >= '0' && r <= '9':
+			mod = (mod*10 + int(r-'0')) % 97
+		case r >= 'A' && r <= 'Z':
+			mod = (mod*100 + int(r-'A'+10)) % 97
+		default:
+			return false
+		}
+	}
+	return mod == 1
+}
+
+func validUSSSN(value string) bool {
+	digits := make([]byte, 0, 9)
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			digits = append(digits, byte(r))
+		}
+	}
+	if len(digits) != 9 {
+		return false
+	}
+	area, _ := strconv.Atoi(string(digits[:3]))
+	group, _ := strconv.Atoi(string(digits[3:5]))
+	serial, _ := strconv.Atoi(string(digits[5:]))
+	return area != 0 && area != 666 && area < 900 && group != 0 && serial != 0
 }
 
 func validAWSAccessKeyID(token string) bool {

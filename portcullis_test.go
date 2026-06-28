@@ -281,6 +281,54 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 	}
 }
 
+func TestPIIRedactorsMirrorMemclawValidation(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{"visa", "4111 1111 1111 1111"},
+		{"mastercard", "5555-5555-5555-4444"},
+		{"amex", "3782 822463 10005"},
+		{"iban_gb", "GB82 WEST 1234 5698 7654 32"},
+		{"iban_de", "DE89 3704 0044 0532 0130 00"},
+		{"ssn_hyphenated", "123-45-6789"},
+		{"ssn_spaced", "123 45 6789"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			input := "value=" + tc.value + " end"
+			assert.Truef(t, portcullis.Contains(input), "must detect %s", tc.name)
+			out := portcullis.Redact(input)
+			assert.NotContainsf(t, out, tc.value, "raw PII must be gone after Redact: %q", out)
+			assert.Contains(t, out, portcullis.Marker)
+		})
+	}
+}
+
+func TestPIIRedactorsRejectInvalidChecksumsAndRanges(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"4111 1111 1111 1112",         // Luhn failure.
+		"5111-1111-1111-1111",         // issuer-looking but Luhn failure.
+		"GB82 TEST 1234 5698 7654 32", // IBAN mod-97 failure.
+		"DE89 ABCD 0044 0532 0130 01", // IBAN mod-97 failure.
+		"000-45-6789",                 // invalid SSN area.
+		"666-45-6789",                 // invalid SSN area.
+		"900-45-6789",                 // invalid SSN area.
+		"123-00-6789",                 // invalid SSN group.
+		"123-45-0000",                 // invalid SSN serial.
+	}
+	for _, in := range cases {
+		assert.Falsef(t, portcullis.Contains(in), "invalid PII shape must not match: %q", in)
+		assert.Equalf(t, in, portcullis.Redact(in), "invalid PII shape must pass through: %q", in)
+	}
+}
+
 func TestHerokuLegacyAPIKeyMatchesAtStart(t *testing.T) {
 	t.Parallel()
 
