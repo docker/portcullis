@@ -176,12 +176,10 @@ func TestAhoScanShardedBoundarySpanningKeyword(t *testing.T) {
 }
 
 // TestEveryRuleCompiles is a catalogue-hygiene guard: every rule's
-// regex must be valid syntax and every rule must declare at least
-// one keyword (otherwise its regex would never be reached). Without
-// this test, a typo in a freshly-added rule expression would only
-// surface when an input happened to trigger that rule's compile()
-// path — which, for rare credential formats, might never happen in
-// the rest of the suite.
+// regex must be valid syntax. Without this test, a typo in a
+// freshly-added rule expression would only surface when an input
+// happened to trigger that rule's compile() path — which, for rare
+// credential formats, might never happen in the rest of the suite.
 func TestEveryRuleCompiles(t *testing.T) {
 	t.Parallel()
 
@@ -190,8 +188,9 @@ func TestEveryRuleCompiles(t *testing.T) {
 
 	for i := range rs.rules {
 		r := &rs.rules[i]
-		assert.Falsef(t, r.kwBits.empty(),
-			"rule %d has no keywords — its regex would never run", i)
+		// Keywordless rules are allowed for broad PII patterns that cannot
+		// be cheaply keyword-prefiltered, provided their regex compiles and
+		// any noisy shape is validator-gated.
 		require.NotPanicsf(t, func() { r.compile() },
 			"rule %d's regex must compile", i)
 		compiled := r.compile()

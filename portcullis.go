@@ -42,7 +42,7 @@ func findMatches(text string) []Match {
 	}
 	rs := compiledRuleSet()
 	found := rs.ac.scan(text)
-	if found.empty() {
+	if found.empty() && !rs.hasAlwaysRun {
 		return nil
 	}
 	var matches []Match
@@ -109,7 +109,7 @@ func Contains(text string) bool {
 	}
 	rs := compiledRuleSet()
 	found := rs.ac.scan(text)
-	if found.empty() {
+	if found.empty() && !rs.hasAlwaysRun {
 		return false
 	}
 	for i := range rs.rules {

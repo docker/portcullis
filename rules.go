@@ -22,9 +22,9 @@ const (
 )
 
 // rule pairs a regular expression with a keyword shortlist. A rule
-// matches when the input contains any of the keywords AND the
-// expression matches; the keyword filter is what keeps detection
-// fast for typical inputs.
+// with keywords matches when the input contains any keyword AND the
+// expression matches; keywordless rules always run and should be
+// reserved for broad PII patterns that are validator-gated.
 //
 // Keywords are matched case-insensitively by default (the AC
 // pre-filter bakes ASCII case-folding into its transition table).
@@ -1951,6 +1951,29 @@ var rules = sync.OnceValue(func() []rule {
 			caseSensitive: true,
 		},
 		{
+			// credit-card-number. Mirrors memclaw's PCI detector: match
+			// common issuer prefixes with optional spaces / dashes, then
+			// require a valid Luhn checksum so ordinary 13-19 digit IDs do
+			// not get redacted as cards.
+			expression: `(?P<secret>\b(?:4\d{3}|5[1-5]\d{2}|2[2-7]\d{2}|3[47]\d{2}|6(?:011|5\d{2})|3(?:0[0-5]|[68]\d)\d)(?:[-\s]?\d){9,15}\b)`,
+			validator:  validLuhn,
+		},
+		{
+			// iban. Mirrors memclaw's IBAN detector: broad ISO 13616
+			// shape with optional spaces, gated by the official mod-97
+			// checksum to avoid flagging arbitrary account-like strings.
+			expression: `(?i)(?P<secret>\b[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]{4}){2,7}(?:[\s]?[A-Z0-9]{1,3})?\b)`,
+			validator:  validIBANMod97,
+		},
+		{
+			// us-ssn. Mirrors memclaw's national-ID rule for US Social
+			// Security numbers, with validation excluding the known-invalid
+			// area / group / serial ranges (000, 666, 9xx, 00, 0000).
+			expression: `(?P<secret>\b\d{3}[- ]?\d{2}[- ]?\d{4}\b)`,
+			validator:  validUSSSN,
+		},
+
+		{
 			// stytch-secret. Stytch (auth platform) project secrets are
 			// shaped `secret-(live|test)-<~44 base64url chars incl. `=`
 			// padding>`; the environment-tagged prefix is unique to the
@@ -1964,9 +1987,9 @@ var rules = sync.OnceValue(func() []rule {
 // compiledRule is the runtime form of a [rule]: its keywords are
 // folded into a [kwMask] over the catalogue's shared keyword index,
 // and its regex is compiled lazily on first match. A clean input —
-// the overwhelmingly common case — therefore never pays for
-// compiling any of the ~240 expressions in the catalogue, only for
-// the keyword bitset and the AC table.
+// the overwhelmingly common case — only runs the small set of
+// keywordless validator-gated PII expressions; all keyworded secret
+// rules still stay behind the AC pre-filter.
 //
 // caseSensitive, when true, requires the post-filter step (see
 // [compiledRule.passes]) to find at least one of [csKW] verbatim
@@ -1988,12 +2011,16 @@ type compiledRule struct {
 }
 
 // passes returns true when the rule should run its regex against
-// text: the AC pre-filter must have matched, and — for case-sensitive
+// text: keywordless rules run for every non-empty input; otherwise
+// the AC pre-filter must have matched, and — for case-sensitive
 // rules — at least one keyword must appear in the original input
 // without the case-fold. The post-filter cost is one
 // [strings.Contains] per CS keyword, two orders of magnitude
 // cheaper than running the rule's regex over the whole file.
 func (r *compiledRule) passes(found kwMask, text string) bool {
+	if r.kwBits.empty() {
+		return true
+	}
 	if !found.overlaps(r.kwBits) {
 		return false
 	}
@@ -2009,14 +2036,16 @@ func (r *compiledRule) passes(found kwMask, text string) bool {
 }
 
 // ruleSet bundles the runtime catalogue with the Aho–Corasick
-// pre-filter built from its (de-duplicated) keyword set. They live
+// pre-filter built from its (de-duplicated) keyword set and records
+// whether any rules intentionally bypass that pre-filter. They live
 // behind a single [sync.OnceValue] so neither piece of state is
 // constructed until the first scan that actually needs it; per-rule
 // regex compilation is further deferred via
 // [compiledRule.compile].
 type ruleSet struct {
-	rules []compiledRule
-	ac    *acAutomaton
+	rules        []compiledRule
+	ac           *acAutomaton
+	hasAlwaysRun bool
 }
 
 var compiledRuleSet = sync.OnceValue(func() *ruleSet {
@@ -2039,8 +2068,12 @@ var compiledRuleSet = sync.OnceValue(func() *ruleSet {
 	}
 
 	rules := make([]compiledRule, len(src))
+	hasAlwaysRun := false
 	for i, r := range src {
 		var bits kwMask
+		if len(r.keywords) == 0 {
+			hasAlwaysRun = true
+		}
 		for _, k := range r.keywords {
 			bits.set(kwIdx[strings.ToLower(k)])
 		}
@@ -2056,5 +2089,5 @@ var compiledRuleSet = sync.OnceValue(func() *ruleSet {
 			}),
 		}
 	}
-	return &ruleSet{rules: rules, ac: buildAhoCorasick(uniq)}
+	return &ruleSet{rules: rules, ac: buildAhoCorasick(uniq), hasAlwaysRun: hasAlwaysRun}
 })
