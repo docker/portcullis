@@ -232,6 +232,69 @@ func validAWSBedrockLongLivedKey(token string) bool {
 	return strings.HasPrefix(string(decoded), "BedrockAPIKey-")
 }
 
+// The keywordless PII rules (credit card, IBAN, SSN) can't hide
+// behind the Aho–Corasick keyword pre-filter, so without a cheap gate
+// their expensive regexes would run over every clean input. Each
+// prefilter below is a necessary condition for its rule's regex to
+// match — it may pass inputs the regex ultimately rejects, but it
+// never rejects an input the regex would accept — so clean prose
+// (which has no long digit runs) skips the regex entirely.
+
+// hasSeparatedDigitRun reports whether text contains a run of at
+// least minDigits decimal digits in which consecutive digits are
+// split by at most one separator byte. Separators are '-' and ' ';
+// the wider ASCII-whitespace set (tab / newline / …) is folded in
+// when ws is true, to mirror the card rule's [-\s] separator class.
+func hasSeparatedDigitRun(text string, minDigits int, ws bool) bool {
+	run := 0
+	afterDigit := false
+	for i := range len(text) {
+		c := text[i]
+		switch {
+		case c >= '0' && c <= '9':
+			run++
+			if run >= minDigits {
+				return true
+			}
+			afterDigit = true
+		case afterDigit && (c == '-' || c == ' ' ||
+			(ws && (c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'))):
+			afterDigit = false
+		default:
+			run = 0
+			afterDigit = false
+		}
+	}
+	return false
+}
+
+// maybeCreditCard gates the card rule: its regex consumes at least 13
+// digits (a 4-digit issuer group plus 9+ more) in a single [-\s]-
+// separated run.
+func maybeCreditCard(text string) bool { return hasSeparatedDigitRun(text, 13, true) }
+
+// maybeSSN gates the SSN rule: its regex is 9 digits split by at most
+// single '-'/' ' separators.
+func maybeSSN(text string) bool { return hasSeparatedDigitRun(text, 9, false) }
+
+// maybeIBAN gates the IBAN rule on its mandatory country-code +
+// check-digit anchor: two ASCII letters immediately followed by two
+// ASCII digits.
+func maybeIBAN(text string) bool {
+	for i := 0; i+3 < len(text); i++ {
+		if isASCIILetter(text[i]) && isASCIILetter(text[i+1]) &&
+			text[i+2] >= '0' && text[i+2] <= '9' &&
+			text[i+3] >= '0' && text[i+3] <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+func isASCIILetter(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+}
+
 func validLuhn(value string) bool {
 	var digits []int
 	for _, r := range value {
