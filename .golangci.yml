@@ -9,18 +9,26 @@ linters:
     - copyloopvar
     - depguard
     - dogsled
+    - dupword
     - durationcheck
+    - embeddedstructfieldcheck
     - errcheck
+    - errchkjson
     - errname
     - errorlint
+    - exhaustive
     - exptostd
     - fatcontext
+    - forcetypeassert
     - gocheckcompilerdirectives
     - gochecknoinits
     - gocritic
+    - godot
     - gomoddirectives
     - goprintffuncname
+    - gosec
     - govet
+    - iface
     - inamedparam
     - ineffassign
     - intrange
@@ -29,15 +37,21 @@ linters:
     - mirror
     - modernize
     - nakedret
+    - nilerr
+    - nilnesserr
+    - nilnil
     - nolintlint
+    - nosprintfhostport
     - perfsprint
     - predeclared
     - reassign
+    - recvcheck
     - revive
     - staticcheck
     - testableexamples
     - testifylint
     - thelper
+    - tparallel
     - unconvert
     - unparam
     - unused
@@ -60,6 +74,16 @@ linters:
           deny:
             - pkg: github.com/stretchr/testify
               desc: testify is for tests only
+    gosec:
+      excludes:
+        # Zero-copy []byte->string via unsafe is deliberate and
+        # documented (FindBytes/ContainsBytes).
+        - G103
+        # Flagged int conversions are bounds-checked by construction
+        # (trie indices, base32/bech32 5-bit groups).
+        - G115
+        # The scanner's job is opening user-supplied paths.
+        - G304
     gocritic:
       disabled-checks:
         - dupImport
@@ -86,6 +110,12 @@ linters:
     presets:
       - comments
       - std-error-handling
+    rules:
+      # Tests hardcode fake credentials on purpose and use relaxed
+      # file permissions / math/rand; gosec adds only noise there.
+      - path: _test\.go
+        linters:
+          - gosec
 issues:
   max-same-issues: 3
 formatters:
