@@ -328,9 +328,18 @@ func scanFileBytes(path, root string, maxSize int64, scanBinary bool) ([]byte, e
 		display = rel
 	}
 	var b strings.Builder
+	// Matches arrive in ascending Start order, so line/column are
+	// tracked with one cursor instead of rescanning data from the
+	// start for every match.
+	line, lastNL, pos := 1, -1, 0
 	for _, m := range matches {
-		line, col := lineCol(data, m.Start)
-		fmt.Fprintf(&b, "%s:%d:%d: %s\n", display, line, col, sanitizeValue(m.Value))
+		for ; pos < m.Start; pos++ {
+			if data[pos] == '\n' {
+				line++
+				lastNL = pos
+			}
+		}
+		fmt.Fprintf(&b, "%s:%d:%d: %s\n", display, line, pos-lastNL, sanitizeValue(m.Value))
 	}
 	return []byte(b.String()), nil
 }
@@ -384,23 +393,6 @@ func readIfScannable(path string, maxSize int64, scanBinary bool) (data []byte, 
 		return nil, false, err
 	}
 	return append(sniff, rest...), true, nil
-}
-
-// lineCol returns the 1-based line and column for offset within data.
-// Column counts bytes since the last newline.
-func lineCol(data []byte, offset int) (line, col int) {
-	if offset > len(data) {
-		offset = len(data)
-	}
-	line = 1
-	last := -1
-	for i := range offset {
-		if data[i] == '\n' {
-			line++
-			last = i
-		}
-	}
-	return line, offset - last
 }
 
 // sanitizeValue collapses CR / LF in v so a multi-line match (e.g. a
