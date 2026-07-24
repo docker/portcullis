@@ -102,12 +102,11 @@ func TestAhoCorasickPropagatesAllKwMaskWords(t *testing.T) {
 }
 
 // TestAhoCorasickPanicOnTooManyPatterns verifies that buildAhoCorasick
-// panics when given more than 320 patterns, which would overflow the
-// kwMask bitset.
+// panics when given more patterns than the kwMask bitset can index.
 func TestAhoCorasickPanicOnTooManyPatterns(t *testing.T) {
 	t.Parallel()
 
-	patterns := make([]string, 321)
+	patterns := make([]string, len(kwMask{})*64+1)
 	for i := range patterns {
 		// Each pattern must be unique to avoid trie conflicts; encode
 		// the index as a 3-letter base-26 string.

@@ -41,6 +41,64 @@ func TestRunPrintsEachSecretFound(t *testing.T) {
 	assert.Equal(t, 3, strings.Count(out, "\n"))
 }
 
+// TestScanFileBytesLineColTracking locks down the incremental
+// line/column cursor: matches at offset zero, several matches on one
+// line, CRLF line endings, and empty files.
+func TestScanFileBytesLineColTracking(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{
+			name:    "match at offset zero",
+			content: githubPAT + "\n",
+			want:    []string{"f:1:1: " + githubPAT},
+		},
+		{
+			name:    "two matches on the same line",
+			content: githubPAT + " " + githubPAT + "\n",
+			want: []string{
+				"f:1:1: " + githubPAT,
+				"f:1:42: " + githubPAT,
+			},
+		},
+		{
+			name:    "crlf line endings",
+			content: "clean line\r\n" + githubPAT + "\r\nkey: " + githubPAT + "\r\n",
+			want: []string{
+				"f:2:1: " + githubPAT,
+				"f:3:6: " + githubPAT,
+			},
+		},
+		{
+			name:    "empty file",
+			content: "",
+			want:    nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			path := filepath.Join(root, "f")
+			require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o644))
+
+			buf, err := scanFileBytes(path, root, defaultMaxSize, false)
+
+			require.NoError(t, err)
+			var wantOut string
+			if len(tc.want) > 0 {
+				wantOut = strings.Join(tc.want, "\n") + "\n"
+			}
+			assert.Equal(t, wantOut, string(buf))
+		})
+	}
+}
+
 func TestRunReturnsZeroWhenNoSecrets(t *testing.T) {
 	t.Parallel()
 

@@ -3,9 +3,10 @@ package portcullis
 // kwMask is a fixed-size bitset over keyword indices, used to record
 // which patterns occurred in a scanned input and which keywords each
 // rule subscribes to. Storing it as a small array keeps every test
-// branch-free; the cap of 320 indices accommodates today's catalogue
-// of ~285 unique keywords with limited remaining headroom for future
-// rules (an overflow trips a deterministic panic in [buildAhoCorasick]).
+// branch-free; the cap of len(kwMask)*64 indices (currently 320)
+// accommodates today's catalogue of ~285 unique keywords with limited
+// remaining headroom for future rules (an overflow trips a
+// deterministic panic in [buildAhoCorasick]).
 type kwMask [5]uint64
 
 func (m *kwMask) empty() bool { return m[0]|m[1]|m[2]|m[3]|m[4] == 0 }

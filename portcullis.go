@@ -36,10 +36,10 @@ func Find(text string) []Match {
 	return dedupOverlapping(findMatches(text))
 }
 
-// scanPrelude runs the shared pre-filter for [Find] and [Contains]:
-// the Aho–Corasick pass over text. ok is false when no rule could
-// possibly match — empty input, or no keyword hit and no
-// always-run rules — letting callers return without touching any
+// scanPrelude runs the shared pre-filter behind [Find], [Redact],
+// and [Contains]: the Aho–Corasick pass over text. ok is false when
+// no rule could possibly match — empty input, or no keyword hit and
+// no always-run rules — letting callers return without touching any
 // regex.
 func scanPrelude(text string) (rs *ruleSet, found kwMask, ok bool) {
 	if text == "" {
