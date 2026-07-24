@@ -67,6 +67,19 @@ func findMatches(text string) []Match {
 	return matches
 }
 
+// sortMatches orders matches by Start ascending, breaking ties by
+// End descending so that at equal starts the longest span comes
+// first — the order both [dedupOverlapping] and [mergeOverlapping]
+// rely on for their single greedy pass.
+func sortMatches(matches []Match) {
+	slices.SortFunc(matches, func(a, b Match) int {
+		if a.Start != b.Start {
+			return a.Start - b.Start
+		}
+		return b.End - a.End
+	})
+}
+
 // dedupOverlapping collapses overlapping matches to one per underlying
 // span, keeping the longest. After sorting by Start asc, End desc, a
 // greedy walk drops anything contained in the last kept match, and a
@@ -80,12 +93,7 @@ func dedupOverlapping(matches []Match) []Match {
 	if len(matches) < 2 {
 		return matches
 	}
-	slices.SortFunc(matches, func(a, b Match) int {
-		if a.Start != b.Start {
-			return a.Start - b.Start
-		}
-		return b.End - a.End
-	})
+	sortMatches(matches)
 	out := matches[:0]
 	for _, m := range matches {
 		if len(out) == 0 || m.Start >= out[len(out)-1].End {
@@ -186,12 +194,7 @@ func mergeOverlapping(matches []Match) []Match {
 	if len(matches) < 2 {
 		return matches
 	}
-	slices.SortFunc(matches, func(a, b Match) int {
-		if a.Start != b.Start {
-			return a.Start - b.Start
-		}
-		return b.End - a.End
-	})
+	sortMatches(matches)
 	out := matches[:0]
 	for _, m := range matches {
 		if len(out) == 0 || m.Start >= out[len(out)-1].End {
