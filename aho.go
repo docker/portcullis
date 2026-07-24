@@ -3,9 +3,10 @@ package portcullis
 // kwMask is a fixed-size bitset over keyword indices, used to record
 // which patterns occurred in a scanned input and which keywords each
 // rule subscribes to. Storing it as a small array keeps every test
-// branch-free; the cap of 320 indices accommodates today's catalogue
-// of ~285 unique keywords with limited remaining headroom for future
-// rules (an overflow trips a deterministic panic in [buildAhoCorasick]).
+// branch-free; the cap of len(kwMask)*64 indices (currently 320)
+// accommodates today's catalogue of ~285 unique keywords with limited
+// remaining headroom for future rules (an overflow trips a
+// deterministic panic in [buildAhoCorasick]).
 type kwMask [5]uint64
 
 func (m *kwMask) empty() bool { return m[0]|m[1]|m[2]|m[3]|m[4] == 0 }
@@ -73,7 +74,7 @@ type acAutomaton struct {
 // buildAhoCorasick compiles patterns into an automaton. Patterns
 // must be lower-cased ASCII.
 func buildAhoCorasick(patterns []string) *acAutomaton {
-	if len(patterns) > 320 {
+	if len(patterns) > len(kwMask{})*64 {
 		panic("portcullis: too many AC patterns for kwMask")
 	}
 
@@ -227,24 +228,14 @@ func (a *acAutomaton) scanSerial(text string) (mask kwMask) {
 		off := raw &^ acceptBit
 		i++
 		if raw&acceptBit != 0 {
-			ap := &accept[off>>stateShift]
-			mask[0] |= ap[0]
-			mask[1] |= ap[1]
-			mask[2] |= ap[2]
-			mask[3] |= ap[3]
-			mask[4] |= ap[4]
+			mask.orIn(&accept[off>>stateShift])
 		}
 		for i < n && off != 0 {
 			raw = next[off+uint32(text[i])]
 			off = raw &^ acceptBit
 			i++
 			if raw&acceptBit != 0 {
-				ap := &accept[off>>stateShift]
-				mask[0] |= ap[0]
-				mask[1] |= ap[1]
-				mask[2] |= ap[2]
-				mask[3] |= ap[3]
-				mask[4] |= ap[4]
+				mask.orIn(&accept[off>>stateShift])
 			}
 		}
 	}
