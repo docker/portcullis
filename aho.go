@@ -73,7 +73,7 @@ type acAutomaton struct {
 // buildAhoCorasick compiles patterns into an automaton. Patterns
 // must be lower-cased ASCII.
 func buildAhoCorasick(patterns []string) *acAutomaton {
-	if len(patterns) > 320 {
+	if len(patterns) > len(kwMask{})*64 {
 		panic("portcullis: too many AC patterns for kwMask")
 	}
 
@@ -227,24 +227,14 @@ func (a *acAutomaton) scanSerial(text string) (mask kwMask) {
 		off := raw &^ acceptBit
 		i++
 		if raw&acceptBit != 0 {
-			ap := &accept[off>>stateShift]
-			mask[0] |= ap[0]
-			mask[1] |= ap[1]
-			mask[2] |= ap[2]
-			mask[3] |= ap[3]
-			mask[4] |= ap[4]
+			mask.orIn(&accept[off>>stateShift])
 		}
 		for i < n && off != 0 {
 			raw = next[off+uint32(text[i])]
 			off = raw &^ acceptBit
 			i++
 			if raw&acceptBit != 0 {
-				ap := &accept[off>>stateShift]
-				mask[0] |= ap[0]
-				mask[1] |= ap[1]
-				mask[2] |= ap[2]
-				mask[3] |= ap[3]
-				mask[4] |= ap[4]
+				mask.orIn(&accept[off>>stateShift])
 			}
 		}
 	}
