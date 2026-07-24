@@ -36,13 +36,26 @@ func Find(text string) []Match {
 	return dedupOverlapping(findMatches(text))
 }
 
-func findMatches(text string) []Match {
+// scanPrelude runs the shared pre-filter for [Find] and [Contains]:
+// the Aho–Corasick pass over text. ok is false when no rule could
+// possibly match — empty input, or no keyword hit and no
+// always-run rules — letting callers return without touching any
+// regex.
+func scanPrelude(text string) (rs *ruleSet, found kwMask, ok bool) {
 	if text == "" {
-		return nil
+		return nil, kwMask{}, false
 	}
-	rs := compiledRuleSet()
-	found := rs.ac.scan(text)
+	rs = compiledRuleSet()
+	found = rs.ac.scan(text)
 	if found.empty() && !rs.hasAlwaysRun {
+		return nil, kwMask{}, false
+	}
+	return rs, found, true
+}
+
+func findMatches(text string) []Match {
+	rs, found, ok := scanPrelude(text)
+	if !ok {
 		return nil
 	}
 	var matches []Match
@@ -112,12 +125,8 @@ func dedupOverlapping(matches []Match) []Match {
 // Contains reports whether text matches any built-in secret rule.
 // It is safe for concurrent use.
 func Contains(text string) bool {
-	if text == "" {
-		return false
-	}
-	rs := compiledRuleSet()
-	found := rs.ac.scan(text)
-	if found.empty() && !rs.hasAlwaysRun {
+	rs, found, ok := scanPrelude(text)
+	if !ok {
 		return false
 	}
 	for i := range rs.rules {
