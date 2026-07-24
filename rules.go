@@ -95,7 +95,7 @@ func contextual(vendor, body string) string {
 // the regex-compiled form actually used at scan time.
 //
 //nolint:funlen // single-source-of-truth for the ruleset
-var rules = sync.OnceValue(func() []rule {
+func rules() []rule {
 	return []rule{
 		{
 			// aws-access-key-id. Prefix list mirrors the gitleaks
@@ -1991,7 +1991,7 @@ var rules = sync.OnceValue(func() []rule {
 			keywords:   []string{"secret-live-", "secret-test-"},
 		},
 	}
-})
+}
 
 // compiledRule is the runtime form of a [rule]: its keywords are
 // folded into a [kwMask] over the catalogue's shared keyword index,
