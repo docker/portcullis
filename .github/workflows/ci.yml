@@ -10,10 +10,10 @@ concurrency:
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches: [ main ]
+    tags: [ "v*" ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   lint:
@@ -30,8 +30,6 @@ jobs:
 
       - name: Lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.12.2
 
       - name: Tidy check
         run: go mod tidy --diff >/dev/null || (echo 'go.mod/go.sum files are not tidy — run gogo tidy' && exit 1)
