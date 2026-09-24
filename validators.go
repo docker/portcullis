@@ -246,23 +246,25 @@ func validAWSBedrockLongLivedKey(token string) bool {
 // the wider ASCII-whitespace set (tab / newline / …) is folded in
 // when ws is true, to mirror the card rule's [-\s] separator class.
 func hasSeparatedDigitRun(text string, minDigits int, ws bool) bool {
-	run := 0
-	afterDigit := false
-	for i := range len(text) {
-		c := text[i]
-		switch {
-		case c >= '0' && c <= '9':
+	for i := 0; i < len(text); {
+		// Skip prose without maintaining digit-run state for every byte.
+		for i < len(text) && (text[i] < '0' || text[i] > '9') {
+			i++
+		}
+		run := 0
+		for i < len(text) && text[i] >= '0' && text[i] <= '9' {
 			run++
 			if run >= minDigits {
 				return true
 			}
-			afterDigit = true
-		case afterDigit && (c == '-' || c == ' ' ||
-			(ws && (c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'))):
-			afterDigit = false
-		default:
-			run = 0
-			afterDigit = false
+			i++
+			if i < len(text) {
+				c := text[i]
+				if c == '-' || c == ' ' ||
+					(ws && (c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f')) {
+					i++
+				}
+			}
 		}
 	}
 	return false
@@ -296,27 +298,26 @@ func isASCIILetter(c byte) bool {
 }
 
 func validLuhn(value string) bool {
-	var digits []int
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			digits = append(digits, int(r-'0'))
+	digits, total := 0, 0
+	for i := len(value) - 1; i >= 0; i-- {
+		c := value[i]
+		if c < '0' || c > '9' {
+			continue
 		}
-	}
-	if len(digits) < 13 || len(digits) > 19 {
-		return false
-	}
-	total := 0
-	for i := range digits {
-		d := digits[len(digits)-1-i]
-		if i%2 == 1 {
+		d := int(c - '0')
+		if digits%2 == 1 {
 			d *= 2
 			if d > 9 {
 				d -= 9
 			}
 		}
 		total += d
+		digits++
+		if digits > 19 {
+			return false
+		}
 	}
-	return total%10 == 0
+	return digits >= 13 && total%10 == 0
 }
 
 func validIBANMod97(value string) bool {

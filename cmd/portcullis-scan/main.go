@@ -395,12 +395,13 @@ func readIfScannable(path string, maxSize int64, scanBinary bool) (data []byte, 
 	return append(sniff, rest...), true, nil
 }
 
+var valueSanitizer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
+
 // sanitizeValue collapses CR / LF in v so a multi-line match (e.g. a
 // PEM block) stays on a single output line.
 func sanitizeValue(v string) string {
 	if !strings.ContainsAny(v, "\r\n") {
 		return v
 	}
-	r := strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
-	return r.Replace(v)
+	return valueSanitizer.Replace(v)
 }
