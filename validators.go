@@ -246,23 +246,25 @@ func validAWSBedrockLongLivedKey(token string) bool {
 // the wider ASCII-whitespace set (tab / newline / …) is folded in
 // when ws is true, to mirror the card rule's [-\s] separator class.
 func hasSeparatedDigitRun(text string, minDigits int, ws bool) bool {
-	run := 0
-	afterDigit := false
-	for i := range len(text) {
-		c := text[i]
-		switch {
-		case c >= '0' && c <= '9':
+	for i := 0; i < len(text); {
+		// Skip prose without maintaining digit-run state for every byte.
+		for i < len(text) && (text[i] < '0' || text[i] > '9') {
+			i++
+		}
+		run := 0
+		for i < len(text) && text[i] >= '0' && text[i] <= '9' {
 			run++
 			if run >= minDigits {
 				return true
 			}
-			afterDigit = true
-		case afterDigit && (c == '-' || c == ' ' ||
-			(ws && (c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'))):
-			afterDigit = false
-		default:
-			run = 0
-			afterDigit = false
+			i++
+			if i < len(text) {
+				c := text[i]
+				if c == '-' || c == ' ' ||
+					(ws && (c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f')) {
+					i++
+				}
+			}
 		}
 	}
 	return false
