@@ -1,6 +1,7 @@
 package portcullis
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"unsafe"
@@ -187,8 +188,18 @@ func Redact(text string) string {
 	if len(matches) == 0 {
 		return text
 	}
+	size := len(text)
+	for _, m := range matches {
+		size -= m.End - m.Start
+	}
+	if len(matches) <= (math.MaxInt-size)/len(Marker) {
+		size += len(matches) * len(Marker)
+	} else {
+		// Let the builder handle growth if the final size overflows.
+		size = len(text)
+	}
 	var b strings.Builder
-	b.Grow(len(text))
+	b.Grow(size)
 	cursor := 0
 	for _, m := range matches {
 		b.WriteString(text[cursor:m.Start])
