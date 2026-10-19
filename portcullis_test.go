@@ -317,6 +317,8 @@ func TestPIIRedactorsRejectInvalidChecksumsAndRanges(t *testing.T) {
 		"5111-1111-1111-1111",         // issuer-looking but Luhn failure.
 		"GB82 TEST 1234 5698 7654 32", // IBAN mod-97 failure.
 		"DE89 ABCD 0044 0532 0130 01", // IBAN mod-97 failure.
+		"fc48e0b3fd9f 2026",           // IBAN-shaped, mod-97 passes, FC is not a country.
+		"fc48e0b3fd9f\n2026-10-15",    // same, split across a line break.
 		"000-45-6789",                 // invalid SSN area.
 		"666-45-6789",                 // invalid SSN area.
 		"900-45-6789",                 // invalid SSN area.

@@ -1965,10 +1965,12 @@ func rules() []rule {
 		},
 		{
 			// iban. Mirrors memclaw's IBAN detector: broad ISO 13616
-			// shape with optional spaces, gated by the official mod-97
+			// shape with optional single spaces (never a newline, which
+			// would let a match run into the next line), gated by the
+			// registered country code and length and the official mod-97
 			// checksum to avoid flagging arbitrary account-like strings.
-			expression: `(?i)(?P<secret>\b[A-Z]{2}\d{2}(?:[\s]?[A-Z0-9]{4}){2,7}(?:[\s]?[A-Z0-9]{1,3})?\b)`,
-			validator:  validIBANMod97,
+			expression: `(?i)(?P<secret>\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b)`,
+			validator:  validIBAN,
 			prefilter:  maybeIBAN,
 		},
 		{

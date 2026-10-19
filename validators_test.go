@@ -193,27 +193,40 @@ func TestInvalidLuhn(t *testing.T) {
 	}
 }
 
-func TestValidIBANMod97(t *testing.T) {
+func TestValidIBAN(t *testing.T) {
 	t.Parallel()
 
 	for _, value := range []string{
 		"GB82 WEST 1234 5698 7654 32",
 		"DE89 3704 0044 0532 0130 00",
 		"FR14 2004 1010 0505 0001 3M02 606",
+		"NL91 ABNA 0417 1643 00",
+		"ES91 2100 0418 4502 0005 1332",
+		"IT60 X054 2811 1010 0000 0123 456",
+		"CH93 0076 2011 6238 5295 7",
+		"BE68 5390 0754 7034",
 	} {
-		assert.Truef(t, validIBANMod97(value), "%q should pass mod-97", value)
+		assert.Truef(t, validIBAN(value), "%q should be a valid IBAN", value)
 	}
 }
 
-func TestInvalidIBANMod97(t *testing.T) {
+func TestInvalidIBAN(t *testing.T) {
 	t.Parallel()
 
 	for _, value := range []string{
 		"GB82 TEST 1234 5698 7654 32",
 		"DE89 3704 0044 0532 0130 01",
 		"not an iban",
+		"",
+		"G",
+		// Passes mod-97 but FC is not a registered IBAN country (the tail
+		// of a UUID in a runner temp path plus the next line's timestamp).
+		"fc48e0b3fd9f 2026",
+		"FC48 E0B3 FD9F 2026",
+		// Valid GB checksum shape but the wrong length for GB.
+		"GB82 WEST 1234 5698 7654 3",
 	} {
-		assert.Falsef(t, validIBANMod97(value), "%q should fail mod-97", value)
+		assert.Falsef(t, validIBAN(value), "%q should not be a valid IBAN", value)
 	}
 }
 
