@@ -2,7 +2,9 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/docker/portcullis.svg)](https://pkg.go.dev/github.com/docker/portcullis)
 
-A tiny Go library that detects and redacts API tokens, cloud
+
+
+a tiny Go library that detects and redacts API tokens, cloud
 credentials, and other secret material in arbitrary text.
 
 ```go
