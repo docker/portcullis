@@ -1,0 +1,3 @@
+policy_checks:
+  - id: smoke-test
+    prompt: .github/gordon-checks/smoke-test.md
