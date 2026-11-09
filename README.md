@@ -126,7 +126,7 @@ go.mod floor (Go 1.26.10) and the latest stable Go release on every PR
 
 ## Performance
 
-On a typical clean input the cost is dominated by a single linear scan
+On a typical clean input, the cost is dominated by a single linear scan
 over the bytes; the regex engine is never invoked. With a secret, only
 the rules whose keywords are present run. Both functions allocate
 only when text actually changes.
