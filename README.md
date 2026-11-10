@@ -121,7 +121,7 @@ gogo -l         # list every task with its description
 
 The linter configuration lives in [`.golangci.yml`](./.golangci.yml).
 The matching CI workflow runs lint + race-enabled tests against the
-go.mod floor (Go 1.26.10) and the latest stable Go release on every PR
+go.mod floor (Go 1.27.4) and the latest stable Go release on every PR
 — see [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
 
 ## Performance
