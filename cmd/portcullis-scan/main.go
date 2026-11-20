@@ -24,12 +24,13 @@
 //	-binary      also scan binary files (default: skipped, like ripgrep).
 //	             A file is considered binary when its first 8 KiB
 //	             contains a NUL byte.
-//	-ignore      glob pattern to skip; repeatable. Patterns containing
-//	             '/' are anchored to the scan root, others match
-//	             basenames. '**' matches any run of characters,
-//	             including separators. Trailing '/' restricts the
-//	             rule to directories. Examples: -ignore '*_test.go'
-//	             -ignore 'vendor/**' -ignore 'node_modules/'
+//	-ignore      glob pattern to skip; repeatable. Patterns with a
+//	             '/' at the start or in the middle are anchored to
+//	             the scan root, others match basenames. '**' matches
+//	             any run of characters, including separators.
+//	             Trailing '/' restricts the rule to directories.
+//	             Examples: -ignore '*_test.go' -ignore 'vendor/**'
+//	             -ignore 'node_modules/' -ignore '/build'
 //
 // Exit codes:
 //
