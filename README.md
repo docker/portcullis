@@ -47,11 +47,39 @@ const Marker = "[REDACTED]"
 
 func Contains(text string) bool   // detect
 func Redact(text string) string   // scrub
+func Find(text string) []Match    // locate
+
+// Same as above for callers holding a []byte, without copying it.
+// Each Match.Value then aliases b: leave b alone while they are in use.
+func ContainsBytes(b []byte) bool
+func FindBytes(b []byte) []Match
+
+type Match struct {
+	Start, End int    // byte offsets into the input
+	Value      string // the input between them
+}
 ```
 
-Both functions are safe for concurrent use. The compiled rule set and
+All of them are safe for concurrent use. The compiled rule set and
 its Aho–Corasick automaton are built once on first call and shared
 across goroutines.
+
+## Command line
+
+`portcullis-scan` runs the same detection over a file or a directory
+tree and prints one `path:line:col: value` line per secret:
+
+```sh
+go install github.com/docker/portcullis/cmd/portcullis-scan@latest
+
+portcullis-scan -ignore 'vendor/**' -ignore '*_test.go' .
+```
+
+It exits with 0 when nothing was found, 1 when a secret was found and
+2 on a usage error or an unreadable file, so it can gate a CI job.
+Its output holds the secrets themselves: where logs are kept, discard
+it and go by the exit status. Binary files and files over 10 MiB are
+skipped unless `-binary` and `-max-size` say otherwise.
 
 ## What it detects
 
@@ -126,28 +154,30 @@ Go version specified in go.mod (Go 1.27.4) on every PR
 
 ## Performance
 
-On a typical clean input the cost is dominated by a single linear scan
-over the bytes; the regex engine is never invoked. With a secret, only
-the rules whose keywords are present run. Both functions allocate
-only when text actually changes.
+An input with none of the rules' keywords and none of the shapes the
+PII rules start from (nine or more digits in a row, single dashes or
+spaces aside, or two letters right before two digits) never reaches a
+regex and, once the rule set is built, allocates nothing. Its cost is
+that of scanning the bytes for keywords (Aho–Corasick), then for
+those shapes. Otherwise only the rules whose keyword or shape is
+present run their regex.
 
 On an Apple M4 Max scrubbing a 9000-byte clean payload and a
 secret-bearing 1.5 KB payload:
 
 ```
-BenchmarkAhoScanCleanInput-16        257198      4823 ns/op  1865.95 MB/s     0 B/op    0 allocs/op
-BenchmarkAhoScanWithKeyword-16      1251084       956.0 ns/op 1636.96 MB/s     0 B/op    0 allocs/op
-BenchmarkRedactCleanInput-16         228036      4803 ns/op                    0 B/op    0 allocs/op
-BenchmarkContainsCleanInput-16       233336      4782 ns/op                    0 B/op    0 allocs/op
-BenchmarkRedactWithSecret-16         565590      2094 ns/op                 1585 B/op    2 allocs/op
-BenchmarkContainsWithSecret-16       912943      1312 ns/op                    0 B/op    0 allocs/op
+BenchmarkAhoScanCleanInput-16        427100      2832 ns/op  3177.96 MB/s     0 B/op    0 allocs/op
+BenchmarkAhoScanWithKeyword-16      1760301       683.8 ns/op 2288.76 MB/s     0 B/op    0 allocs/op
+BenchmarkRedactCleanInput-16         200227      6089 ns/op                    0 B/op    0 allocs/op
+BenchmarkContainsCleanInput-16       203072      6016 ns/op                    0 B/op    0 allocs/op
+BenchmarkRedactWithSecret-16         418003      2835 ns/op                 1717 B/op    7 allocs/op
+BenchmarkContainsWithSecret-16       745269      1609 ns/op                  129 B/op    5 allocs/op
 ```
 
-The AC scan dominates the clean-input path — `Redact` and `Contains`
-add no measurable overhead on top of it because the rule loop
-short-circuits on an empty keyword mask. `Contains` allocates zero
-bytes even on a secret-bearing input: it only needs the regex
-`MatchString`, which uses pooled state machines internally.
+`Contains` returns on the first rule that matches, so on a
+secret-bearing input it usually skips the shape scan and the rest of
+the catalogue. `Redact` has to visit every rule, and allocates for
+the matches it finds and the redacted copy.
 
 ## Provenance
 
