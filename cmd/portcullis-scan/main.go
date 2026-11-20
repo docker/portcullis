@@ -41,10 +41,12 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -361,38 +363,53 @@ func readIfScannable(path string, maxSize int64, scanBinary bool) (data []byte, 
 	if err != nil {
 		return nil, false, err
 	}
-	size := st.Size()
-	if maxSize > 0 && size > maxSize {
+	if maxSize > 0 && st.Size() > maxSize {
 		return nil, false, nil
 	}
 
-	if scanBinary {
-		data, err = io.ReadAll(f)
-		if err != nil {
-			return nil, false, err
-		}
-		return data, true, nil
+	// That size is only a hint: a pipe (`<(git diff)`, a FIFO) reports
+	// 0 and a file being written to can outgrow it. So read to EOF
+	// rather than to that size, stopping one byte past maxSize so that
+	// content over the limit is still skipped.
+	var r io.Reader = f
+	if maxSize > 0 && maxSize < math.MaxInt64 {
+		r = io.LimitReader(f, maxSize+1)
 	}
 
 	// Sniff first 8 KiB for a NUL byte before committing to read
 	// the rest. On large binaries (git packs, archives, prebuilt
 	// executables) this avoids both the IO and the regex pass.
-	sniffN := min(int64(binarySniffSize), size)
-	sniff := make([]byte, sniffN)
-	if _, err = io.ReadFull(f, sniff); err != nil {
+	//
+	// The buffer starts one byte past the stat size, enough to see a
+	// small file end where it should, and only widens to the full
+	// window if there turns out to be more.
+	data = make([]byte, min(st.Size(), binarySniffSize-1)+1)
+	n, err := io.ReadFull(r, data)
+	if err == nil && n < binarySniffSize {
+		data = append(data, make([]byte, binarySniffSize-n)...)
+		var more int
+		more, err = io.ReadFull(r, data[n:])
+		n += more
+	}
+	atEOF := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+	if err != nil && !atEOF {
 		return nil, false, err
 	}
-	if bytes.IndexByte(sniff, 0) >= 0 {
+	data = data[:n]
+	if !scanBinary && bytes.IndexByte(data, 0) >= 0 {
 		return nil, false, nil
 	}
-	if size == sniffN {
-		return sniff, true, nil
+	if !atEOF {
+		rest, err := io.ReadAll(r)
+		if err != nil {
+			return nil, false, err
+		}
+		data = append(data, rest...)
 	}
-	rest, err := io.ReadAll(f)
-	if err != nil {
-		return nil, false, err
+	if maxSize > 0 && int64(len(data)) > maxSize {
+		return nil, false, nil
 	}
-	return append(sniff, rest...), true, nil
+	return data, true, nil
 }
 
 var valueSanitizer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
