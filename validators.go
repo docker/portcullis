@@ -235,62 +235,92 @@ func validAWSBedrockLongLivedKey(token string) bool {
 // The keywordless PII rules (credit card, IBAN, SSN) can't hide
 // behind the Aho–Corasick keyword pre-filter, so without a cheap gate
 // their expensive regexes would run over every clean input. Each
-// prefilter below is a necessary condition for its rule's regex to
-// match — it may pass inputs the regex ultimately rejects, but it
-// never rejects an input the regex would accept — so clean prose
-// (which has no long digit runs) skips the regex entirely.
+// shape below is a necessary condition for its rule's regex to
+// match — it may show up in inputs the regex ultimately rejects, but
+// it is never missing from an input the regex would accept — so clean
+// prose (which has no long digit runs) skips the regex entirely.
+type shapes uint8
 
-// hasSeparatedDigitRun reports whether text contains a run of at
-// least minDigits decimal digits in which consecutive digits are
-// split by at most one separator byte. Separators are '-' and ' ';
-// the wider ASCII-whitespace set (tab / newline / …) is folded in
-// when ws is true, to mirror the card rule's [-\s] separator class.
-func hasSeparatedDigitRun(text string, minDigits int, ws bool) bool {
+const (
+	// shapeCard gates the card rule: its regex consumes at least 13
+	// digits (a 4-digit issuer group plus 9+ more) in a run where
+	// consecutive digits are split by at most one byte of its [-\s]
+	// separator class.
+	shapeCard shapes = 1 << iota
+	// shapeSSN gates the SSN rule: its regex is 9 digits split by at
+	// most single '-'/' ' separators.
+	shapeSSN
+	// shapeIBAN gates the IBAN rule on its mandatory country-code +
+	// check-digit anchor: two ASCII letters immediately followed by
+	// two ASCII digits.
+	shapeIBAN
+
+	allShapes = shapeCard | shapeSSN | shapeIBAN
+)
+
+// scanShapes reports every shape text contains, in a single pass.
+// They all need a digit, so prose is skipped byte by byte without
+// keeping any state and only the digit runs get a closer look.
+func scanShapes(text string) (found shapes) {
 	for i := 0; i < len(text); {
-		// Skip prose without maintaining digit-run state for every byte.
-		for i < len(text) && (text[i] < '0' || text[i] > '9') {
+		for i < len(text) && !isASCIIDigit(text[i]) {
 			i++
 		}
-		run := 0
-		for i < len(text) && text[i] >= '0' && text[i] <= '9' {
-			run++
-			if run >= minDigits {
-				return true
+		// text[i], if any, opens a digit run: the one place where
+		// letters can sit right before digits.
+		if i >= 2 && i+1 < len(text) && isASCIIDigit(text[i+1]) &&
+			isASCIILetter(text[i-1]) && isASCIILetter(text[i-2]) {
+			found |= shapeIBAN
+		}
+		// Count the digits that at most one separator byte splits
+		// from the previous one. '-' and ' ' separate for both rules;
+		// the rest of ASCII whitespace only does for cards, so it
+		// starts the SSN count over.
+		card, ssn := 0, 0
+		for i < len(text) && isASCIIDigit(text[i]) {
+			card++
+			ssn++
+			if card >= 13 {
+				found |= shapeCard
+			}
+			if ssn >= 9 {
+				found |= shapeSSN
 			}
 			i++
 			if i < len(text) {
-				c := text[i]
-				if c == '-' || c == ' ' ||
-					(ws && (c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f')) {
+				switch text[i] {
+				case '-', ' ':
+					i++
+				case '\t', '\n', '\r', '\v', '\f':
+					ssn = 0
 					i++
 				}
 			}
 		}
-	}
-	return false
-}
-
-// maybeCreditCard gates the card rule: its regex consumes at least 13
-// digits (a 4-digit issuer group plus 9+ more) in a single [-\s]-
-// separated run.
-func maybeCreditCard(text string) bool { return hasSeparatedDigitRun(text, 13, true) }
-
-// maybeSSN gates the SSN rule: its regex is 9 digits split by at most
-// single '-'/' ' separators.
-func maybeSSN(text string) bool { return hasSeparatedDigitRun(text, 9, false) }
-
-// maybeIBAN gates the IBAN rule on its mandatory country-code +
-// check-digit anchor: two ASCII letters immediately followed by two
-// ASCII digits.
-func maybeIBAN(text string) bool {
-	for i := 0; i+3 < len(text); i++ {
-		if isASCIILetter(text[i]) && isASCIILetter(text[i+1]) &&
-			text[i+2] >= '0' && text[i+2] <= '9' &&
-			text[i+3] >= '0' && text[i+3] <= '9' {
-			return true
+		if found == allShapes {
+			break
 		}
 	}
-	return false
+	return found
+}
+
+// lazyShapes runs [scanShapes] over an input at most once, and only
+// if a keywordless rule is reached at all: [Contains] often returns
+// on a keyworded rule before that.
+type lazyShapes struct {
+	scanned bool
+	found   shapes
+}
+
+func (l *lazyShapes) has(text string, shape shapes) bool {
+	if !l.scanned {
+		l.found, l.scanned = scanShapes(text), true
+	}
+	return l.found&shape != 0
+}
+
+func isASCIIDigit(c byte) bool {
+	return c >= '0' && c <= '9'
 }
 
 func isASCIILetter(c byte) bool {

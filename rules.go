@@ -39,12 +39,12 @@ type rule struct {
 	keywords      []string
 	caseSensitive bool
 	validator     func(string) bool
-	// prefilter is a cheap necessary-condition byte scan for
-	// keywordless rules, which the AC pre-filter can't gate. When set,
-	// the rule's regex only runs on inputs the prefilter accepts; it
-	// must never reject an input the regex would match. Ignored for
-	// rules that carry keywords.
-	prefilter func(string) bool
+	// shape is a cheap necessary condition for keywordless rules,
+	// which the AC pre-filter can't gate. When set, the rule's regex
+	// only runs on inputs where [scanShapes] finds that shape; it
+	// must never be missing from an input the regex would match.
+	// Ignored for rules that carry keywords.
+	shape shapes
 }
 
 // asSecretGroup wraps a `?P<secret>…` fragment in a plain group so
@@ -1990,7 +1990,7 @@ func rules() []rule {
 			// not get redacted as cards.
 			expression: `(?P<secret>\b(?:4\d{3}|5[1-5]\d{2}|2[2-7]\d{2}|3[47]\d{2}|6(?:011|5\d{2})|3(?:0[0-5]|[68]\d)\d)(?:[-\s]?\d){9,15}\b)`,
 			validator:  validLuhn,
-			prefilter:  maybeCreditCard,
+			shape:      shapeCard,
 		},
 		{
 			// iban. Mirrors memclaw's IBAN detector: broad ISO 13616
@@ -2000,7 +2000,7 @@ func rules() []rule {
 			// checksum to avoid flagging arbitrary account-like strings.
 			expression: `(?i)(?P<secret>\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b)`,
 			validator:  validIBAN,
-			prefilter:  maybeIBAN,
+			shape:      shapeIBAN,
 		},
 		{
 			// us-ssn. Mirrors memclaw's national-ID rule for US Social
@@ -2008,7 +2008,7 @@ func rules() []rule {
 			// area / group / serial ranges (000, 666, 9xx, 00, 0000).
 			expression: `(?P<secret>\b\d{3}[- ]?\d{2}[- ]?\d{4}\b)`,
 			validator:  validUSSSN,
-			prefilter:  maybeSSN,
+			shape:      shapeSSN,
 		},
 
 		{
@@ -2053,22 +2053,22 @@ type compiledRule struct {
 	kwBits        kwMask
 	caseSensitive bool
 	csKW          []string
-	prefilter     func(string) bool
+	shape         shapes
 	compile       func() compiledMatch // memoised
 }
 
 // passes returns true when the rule should run its regex against
-// text: keywordless rules run whenever their cheap [rule.prefilter]
-// byte scan accepts the input (a necessary condition for the regex to
-// match, so clean prose skips the expensive expression); otherwise
+// text: keywordless rules run whenever the input has their cheap
+// [rule.shape] (a necessary condition for the regex to match, so
+// clean prose skips the expensive expression); otherwise
 // the AC pre-filter must have matched, and — for case-sensitive
 // rules — at least one keyword must appear in the original input
 // without the case-fold. The post-filter cost is one
 // [strings.Contains] per CS keyword, two orders of magnitude
 // cheaper than running the rule's regex over the whole file.
-func (r *compiledRule) passes(found kwMask, text string) bool {
+func (r *compiledRule) passes(found kwMask, seen *lazyShapes, text string) bool {
 	if r.kwBits.empty() {
-		return r.prefilter == nil || r.prefilter(text)
+		return r.shape == 0 || seen.has(text, r.shape)
 	}
 	if !found.overlaps(r.kwBits) {
 		return false
@@ -2132,7 +2132,7 @@ var compiledRuleSet = sync.OnceValue(func() *ruleSet {
 			kwBits:        bits,
 			caseSensitive: r.caseSensitive,
 			csKW:          r.keywords,
-			prefilter:     r.prefilter,
+			shape:         r.shape,
 			compile: sync.OnceValue(func() compiledMatch {
 				re := regexp.MustCompile(expr)
 				return compiledMatch{re: re, secretIdx: re.SubexpIndex("secret"), validator: validator}

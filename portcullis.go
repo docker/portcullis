@@ -61,10 +61,11 @@ func findMatches(text string) []Match {
 	if !ok {
 		return nil
 	}
+	var seen lazyShapes
 	var matches []Match
 	for i := range rs.rules {
 		r := &rs.rules[i]
-		if !r.passes(found, text) {
+		if !r.passes(found, &seen, text) {
 			continue
 		}
 		compiled := r.compile()
@@ -136,9 +137,10 @@ func Contains(text string) bool {
 	// Redact left in its place, so that shortcut is reserved for
 	// marker-free input.
 	markers := strings.Count(text, Marker)
+	var seen lazyShapes
 	for i := range rs.rules {
 		r := &rs.rules[i]
-		if !r.passes(found, text) {
+		if !r.passes(found, &seen, text) {
 			continue
 		}
 		compiled := r.compile()
