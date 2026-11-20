@@ -776,20 +776,21 @@ func rules() []rule {
 			// discord-bot-token. Three-part dotted format issued for bot
 			// applications: `<base64 snowflake>.<6-char timestamp>.<27+
 			// char HMAC>`. The first segment is the bot's user-ID base64
-			// encoded; current Discord IDs (2018 onwards) base64 to a
-			// leading `MT`/`Mz`/`ND`/`NT`/`Nz`/`OD` byte pair, which we
-			// list as keywords so the AC pre-filter still skips inputs
-			// without a plausible token prefix. The structural shape
-			// (M-or-N-or-O-prefixed body, two literal dots, fixed segment
-			// widths) keeps the regex itself specific.
+			// encoded, so the ID's leading decimal digit (1-9) fixes its
+			// first two characters: `MT`/`Mj`/`Mz`/`ND`/`NT`/`Nj`/`Nz`/
+			// `OD`/`OT`. The regex requires one of the nine, and we list
+			// them as keywords so the AC pre-filter still skips inputs
+			// without a plausible token prefix. Together with the two
+			// literal dots and the fixed segment widths, that keeps the
+			// rule specific.
 			//
 			// caseSensitive is critical here: the lower-cased forms of
 			// these two-letter prefixes (`mt`, `nd`, `od`, …) are common
 			// English bigrams and trip the keyword pre-filter on ~30% of
 			// arbitrary text files. Pinning the case lets the AC pass
 			// drop the regex run on those files.
-			expression:    `[MNO][A-Za-z\d_-]{23,25}\.[\w-]{6,7}\.[\w-]{27,38}`,
-			keywords:      []string{"MT", "Mz", "ND", "NT", "Nz", "OD"},
+			expression:    `(?:M[Tjz]|N[DTjz]|O[DT])[A-Za-z\d_-]{22,24}\.[\w-]{6,7}\.[\w-]{27,38}`,
+			keywords:      []string{"MT", "Mj", "Mz", "ND", "NT", "Nj", "Nz", "OD", "OT"},
 			caseSensitive: true,
 		},
 		{
