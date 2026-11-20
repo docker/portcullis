@@ -512,6 +512,59 @@ func TestRedactCoversGluedSlackAccessTokens(t *testing.T) {
 	}
 }
 
+// TestRedactCoversWholeStripeKey pins the body length of the Stripe
+// secret and restricted key rules. Current keys (`sk_live_51…`) carry
+// a 99-character body, so a lower cap leaves the tail of the key in
+// the output.
+func TestRedactCoversWholeStripeKey(t *testing.T) {
+	t.Parallel()
+
+	for _, prefix := range []string{"sk_live_", "sk_test_", "sk_prod_", "rk_live_", "rk_test_", "rk_prod_"} {
+		t.Run(prefix, func(t *testing.T) {
+			t.Parallel()
+
+			key := prefix + "51" + strings.Repeat("aB3", 32) + "x"
+			in := "STRIPE_KEY=" + key + " and the rest of the line"
+
+			assert.Equal(t, "STRIPE_KEY="+portcullis.Marker+" and the rest of the line", portcullis.Redact(in))
+			matches := portcullis.Find(in)
+			require.Len(t, matches, 1)
+			assert.Equal(t, key, matches[0].Value)
+		})
+	}
+}
+
+// TestRedactCoversGluedStripeKeys: with no separator between two
+// keys, the body of the first takes the `sk` / `rk` of the second.
+// What is left of the second key must not stay behind in clear.
+func TestRedactCoversGluedStripeKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, prefixes := range [][2]string{
+		{"sk_live_", "sk_live_"},
+		{"sk_live_", "rk_test_"},
+		{"rk_prod_", "sk_test_"},
+	} {
+		// 247 is the body ceiling: just under it, the first body has
+		// room for only part of the next prefix.
+		for _, bodyLen := range []int{24, 32, 99, 245, 246, 247} {
+			glued := prefixes[0] + strings.Repeat("a", bodyLen) +
+				prefixes[1] + strings.Repeat("b", bodyLen) +
+				prefixes[0] + strings.Repeat("c", bodyLen)
+
+			assert.Equal(t, "key="+portcullis.Marker+" end", portcullis.Redact("key="+glued+" end"), glued)
+			matches := portcullis.Find(glued)
+			require.Len(t, matches, 1, glued)
+			assert.Equal(t, glued, matches[0].Value)
+		}
+	}
+
+	// Only another key carries the match on. An environment-looking
+	// suffix is not one.
+	key := "sk_live_" + strings.Repeat("a", 24)
+	assert.Equal(t, portcullis.Marker+"_prod_environment", portcullis.Redact(key+"_prod_environment"))
+}
+
 // TestRedactDoesNotSwallowAdjacentTextAfterPrefixedTokens pins the
 // upper bounds of the rules whose bodies share a character class
 // with arbitrary trailing text. Without an explicit ceiling on the

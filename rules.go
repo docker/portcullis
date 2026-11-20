@@ -100,6 +100,16 @@ func chain(head, link, body string) string {
 	return head + `(?:` + body + link + `)*` + body
 }
 
+// stripeKey builds the expression of the Stripe secret (`sk`) and
+// restricted (`rk`) key rules: `<prefix>_<env>_<body>`. Current keys
+// (`sk_live_51…`) carry a 99-character body where the original format
+// had 24, and a ceiling that is too low leaves the tail of a key in
+// clear, so it sits at TruffleHog's 247.
+func stripeKey(prefix string) string {
+	const env = `_(?:test|live|prod)_`
+	return `(?i)` + chain(prefix+env, `[sr]k`+env, `[0-9a-z]{10,247}`)
+}
+
 // rules is the source-form catalogue, kept verbatim from upstream so
 // future updates apply cleanly. [compiledRuleSet] resolves it into
 // the regex-compiled form actually used at scan time.
@@ -206,7 +216,7 @@ func rules() []rule {
 			// intentionally NOT redacted: Stripe publishable keys are
 			// designed to be embedded in client-side code and are not
 			// considered secret.
-			expression: asSecretGroup(`?P<secret>(?i)sk_(test|live|prod)_[0-9a-z]{10,32}`),
+			expression: asSecretGroup(`?P<secret>` + stripeKey(`sk`)),
 			keywords:   []string{"sk_test_", "sk_live_", "sk_prod_"},
 		},
 		{
@@ -693,7 +703,7 @@ func rules() []rule {
 			// a restricted key still grants the scoped Stripe permissions
 			// it was issued with, so it must be redacted. The `prod` env
 			// tag was added in 2024 alongside the `test` / `live` modes.
-			expression: `(?i)rk_(test|live|prod)_[0-9a-z]{10,32}`,
+			expression: stripeKey(`rk`),
 			keywords:   []string{"rk_test_", "rk_live_", "rk_prod_"},
 		},
 		{
