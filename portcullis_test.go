@@ -2,6 +2,8 @@ package portcullis_test
 
 import (
 	"encoding/base64"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -624,6 +626,31 @@ func TestRedactDoesNotSwallowAdjacentTextAfterPrefixedTokens(t *testing.T) {
 				tc.name, out)
 		})
 	}
+}
+
+// TestREADMEExample checks the inputs and results shown at the top of
+// the README, the first thing a new user pastes. It once kept showing
+// a GitHub token that the checksum validator had stopped accepting.
+func TestREADMEExample(t *testing.T) {
+	t.Parallel()
+
+	const (
+		in      = "Run this with AWS_ACCESS_KEY_ID=AKIARZPUZDIKQEXAMPLE please."
+		out     = "Run this with AWS_ACCESS_KEY_ID=[REDACTED] please."
+		clean   = "not a secret"
+		leaking = "AWS_ACCESS_KEY_ID=AKIARZPUZDIKQEXAMPLE"
+	)
+	readme, err := os.ReadFile("README.md")
+	require.NoError(t, err)
+	for _, literal := range []string{in, out, clean, leaking} {
+		if quoted := strconv.Quote(literal); !strings.Contains(string(readme), quoted) {
+			t.Fatalf("README.md no longer shows %s: update this test along with it", quoted)
+		}
+	}
+
+	assert.Equal(t, out, portcullis.Redact(in))
+	assert.False(t, portcullis.Contains(clean))
+	assert.True(t, portcullis.Contains(leaking))
 }
 
 // TestContainsIgnoresHarmlessText: pure digit strings, plain English,

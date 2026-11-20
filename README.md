@@ -8,11 +8,11 @@ credentials, and other secret material in arbitrary text.
 ```go
 import "github.com/docker/portcullis"
 
-clean := portcullis.Redact("Run this with token=ghp_1234567890abcdef1234567890abcdef1234 please.")
-// → "Run this with token=[REDACTED] please."
+clean := portcullis.Redact("Run this with AWS_ACCESS_KEY_ID=AKIARZPUZDIKQEXAMPLE please.")
+// → "Run this with AWS_ACCESS_KEY_ID=[REDACTED] please."
 
-portcullis.Contains("not a secret")                                   // false
-portcullis.Contains("token=ghp_1234567890abcdef1234567890abcdef1234") // true
+portcullis.Contains("not a secret")                           // false
+portcullis.Contains("AWS_ACCESS_KEY_ID=AKIARZPUZDIKQEXAMPLE") // true
 ```
 
 ## Why
