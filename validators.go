@@ -222,7 +222,7 @@ func validCloudflareAPIKey(token string) bool {
 }
 
 func validAWSBedrockLongLivedKey(token string) bool {
-	if len(token) != 132 || len(token)%4 != 0 {
+	if len(token) != 132 {
 		return false
 	}
 	decoded, err := base64.StdEncoding.DecodeString(token[4:])
