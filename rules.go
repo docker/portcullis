@@ -1998,7 +1998,10 @@ func rules() []rule {
 			// would let a match run into the next line), gated by the
 			// registered country code and length and the official mod-97
 			// checksum to avoid flagging arbitrary account-like strings.
-			expression: `(?i)(?P<secret>\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b)`,
+			// Both cases are spelled out rather than folded with `(?i)`,
+			// which would also let `ſ` and the Kelvin sign in as letters,
+			// past the ASCII ones [shapeIBAN] looks for.
+			expression: `(?P<secret>\b[A-Za-z]{2}\d{2}(?:[ ]?[A-Za-z0-9]{4}){2,7}(?:[ ]?[A-Za-z0-9]{1,3})?\b)`,
 			validator:  validIBAN,
 			shape:      shapeIBAN,
 		},

@@ -95,6 +95,40 @@ func TestScanShapesMatchesReference(t *testing.T) {
 	}
 }
 
+// TestShapesAreNecessaryForTheirRules checks the claim every shape
+// rests on: an input its rule's regex matches always has the shape.
+// A gate stricter than the regex would drop matches, and do so
+// depending on what else the input happens to contain.
+func TestShapesAreNecessaryForTheirRules(t *testing.T) {
+	t.Parallel()
+
+	rs := compiledRuleSet()
+	// Some letters and separators, `ſ`, which case-folds to an ASCII
+	// letter without being one, and mostly digits.
+	alphabet := []string{"A", "b", "Z", "ſ", "-", ".", " ", "\t", "\n"}
+	for d := '0'; d <= '9'; d++ {
+		alphabet = append(alphabet, string(d), string(d))
+	}
+	rng := rand.New(rand.NewSource(1))
+	for range 20_000 {
+		var b strings.Builder
+		for range rng.Intn(40) {
+			b.WriteString(alphabet[rng.Intn(len(alphabet))])
+		}
+		text := b.String()
+		found := scanShapes(text)
+		for i := range rs.rules {
+			r := &rs.rules[i]
+			if r.shape == 0 || found&r.shape != 0 {
+				continue
+			}
+			if loc := r.compile().re.FindStringIndex(text); loc != nil {
+				t.Fatalf("rule %d matches %q in %q, which lacks the rule's shape", i, text[loc[0]:loc[1]], text)
+			}
+		}
+	}
+}
+
 func BenchmarkScanShapes(b *testing.B) {
 	for _, tc := range []struct {
 		name, input string
