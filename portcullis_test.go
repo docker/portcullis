@@ -438,6 +438,80 @@ func TestRedactDoesNotSwallowAdjacentTextAfterSlackRotatingToken(t *testing.T) {
 		"adjacent hostname must NOT be swallowed by the rotating-token regex: %q", out)
 }
 
+// TestRedactCoversWholeSlackAccessToken pins the span of the
+// slack-access-token rule. Slack tokens are dash-separated and the
+// secret is the last segment (`xoxb-<team id>-<bot id>-<secret>`), so
+// a match that stops at the first dash leaves the secret in the
+// output.
+func TestRedactCoversWholeSlackAccessToken(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		token string
+	}{
+		{"bot", "xoxb-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("a", 24)},
+		{"user", "xoxp-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("3", 13) + "-" + strings.Repeat("f", 32)},
+		{"session", "xoxs-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 11) + "-" + strings.Repeat("3", 11) + "-" + strings.Repeat("f", 64)},
+		{"single_segment", "xoxa-" + strings.Repeat("a", 24)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			in := "SLACK_TOKEN=" + tc.token + " and the rest of the line"
+
+			assert.Equal(t, "SLACK_TOKEN="+portcullis.Marker+" and the rest of the line", portcullis.Redact(in))
+			matches := portcullis.Find(in)
+			require.Len(t, matches, 1)
+			assert.Equal(t, tc.token, matches[0].Value)
+		})
+	}
+
+	// The first segment still has to look like an ID, so the
+	// placeholder found in every Slack tutorial keeps passing through.
+	assert.False(t, portcullis.Contains("xoxb-your-token-here"))
+}
+
+// TestSlackAccessTokenStopsAtItsLastSegment: the match must not run
+// on into whatever is hyphenated onto a token, least of all into the
+// prefix of a second token, which would then go undetected.
+func TestSlackAccessTokenStopsAtItsLastSegment(t *testing.T) {
+	t.Parallel()
+
+	user := "xoxp-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("3", 13) + "-" + strings.Repeat("f", 32)
+	bot := "xoxb-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("a", 24)
+	legacy := "xoxa-" + strings.Repeat("a", 24)
+
+	assert.Equal(t, portcullis.Marker+"-retry-count", portcullis.Redact(user+"-retry-count"))
+	assert.Equal(t, portcullis.Marker+"-retry-count", portcullis.Redact(bot+"-retry-count"))
+
+	for _, second := range []string{user, bot, legacy} {
+		matches := portcullis.Find(user + "-" + second)
+		require.Len(t, matches, 2)
+		assert.Equal(t, user, matches[0].Value)
+		assert.Equal(t, second, matches[1].Value)
+	}
+}
+
+// TestRedactCoversGluedSlackAccessTokens: with no separator at all,
+// the last segment of a token takes the `xoxb` of the next one. What
+// is left of that one must not stay behind in clear.
+func TestRedactCoversGluedSlackAccessTokens(t *testing.T) {
+	t.Parallel()
+
+	user := "xoxp-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("3", 13) + "-" + strings.Repeat("f", 32)
+	bot := "xoxb-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("a", 24)
+	legacy := "xoxa-" + strings.Repeat("b", 24)
+
+	for _, glued := range []string{bot + legacy, legacy + bot, user + bot + legacy, legacy + legacy} {
+		assert.Equal(t, "token="+portcullis.Marker+" end", portcullis.Redact("token="+glued+" end"), glued)
+		matches := portcullis.Find(glued)
+		require.Len(t, matches, 1, glued)
+		assert.Equal(t, glued, matches[0].Value)
+	}
+}
+
 // TestRedactDoesNotSwallowAdjacentTextAfterPrefixedTokens pins the
 // upper bounds of the rules whose bodies share a character class
 // with arbitrary trailing text. Without an explicit ceiling on the

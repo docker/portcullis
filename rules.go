@@ -88,6 +88,18 @@ func contextual(vendor, body string) string {
 		`(?P<secret>` + body + `)(?:[\x60'"\s;]|\\[nr]|$)`
 }
 
+// chain matches head then body, and carries on over every further
+// link and body glued to them without a separator. A body's character
+// class also takes the first characters of a token that follows it
+// directly (the `sk` of `sk_live_…`), so a match that ended with the
+// first body would leave the rest of the second token unmatched and
+// in clear. A run of glued tokens comes out as a single match. It
+// ends early at a token too short to match without those borrowed
+// characters, which nothing short of lookahead can tell apart.
+func chain(head, link, body string) string {
+	return head + `(?:` + body + link + `)*` + body
+}
+
 // rules is the source-form catalogue, kept verbatim from upstream so
 // future updates apply cleanly. [compiledRuleSet] resolves it into
 // the regex-compiled form actually used at scan time.
@@ -177,8 +189,14 @@ func rules() []rule {
 			keywords:   []string{"shpss_", "shpat_", "shpca_", "shppa_"},
 		},
 		{
-			// slack-access-token
-			expression: asSecretGroup(`?P<secret>xox[baprs]-([0-9a-zA-Z]{10,48})`),
+			// slack-access-token. Slack tokens are dash-separated: one to
+			// three numeric IDs, then the secret (`xoxb-<team id>-<bot
+			// id>-<secret>`, `xoxp-<team id>-<user id>-<id>-<secret>`).
+			// The match has to reach that last segment, or the redaction
+			// leaves the secret itself in clear. It stops there too, so
+			// whatever is hyphenated onto a token stays out of it. The
+			// second alternative is the original single-segment shape.
+			expression: asSecretGroup(`?P<secret>` + chain(`xox[baprs]-`, `xox[baprs]-`, `(?:(?:[0-9]{8,14}-){1,3}[0-9a-zA-Z]{18,128}|[0-9a-zA-Z]{10,48})`)),
 			keywords:   []string{"xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"},
 		},
 		{
