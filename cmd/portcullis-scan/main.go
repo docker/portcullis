@@ -7,8 +7,9 @@
 //	<path>:<line>:<col>: <value>
 //
 // Paths are relative to the scan root. Newlines and carriage returns
-// inside a matched value are collapsed to spaces so each match
-// remains on a single line; this only affects display, not detection.
+// inside a path or a matched value are collapsed to spaces so each
+// match remains on a single line; this only affects display, not
+// detection.
 // Files are scanned in parallel; output order matches the walker's
 // lexical order, so two runs over the same tree produce identical
 // output regardless of worker count or scheduling.
@@ -24,12 +25,13 @@
 //	-binary      also scan binary files (default: skipped, like ripgrep).
 //	             A file is considered binary when its first 8 KiB
 //	             contains a NUL byte.
-//	-ignore      glob pattern to skip; repeatable. Patterns containing
-//	             '/' are anchored to the scan root, others match
-//	             basenames. '**' matches any run of characters,
-//	             including separators. Trailing '/' restricts the
-//	             rule to directories. Examples: -ignore '*_test.go'
-//	             -ignore 'vendor/**' -ignore 'node_modules/'
+//	-ignore      glob pattern to skip; repeatable. Patterns with a
+//	             '/' at the start or in the middle are anchored to
+//	             the scan root, others match basenames. '**' matches
+//	             any run of characters, including separators.
+//	             Trailing '/' restricts the rule to directories.
+//	             Examples: -ignore '*_test.go' -ignore 'vendor/**'
+//	             -ignore 'node_modules/' -ignore '/build'
 //
 // Exit codes:
 //
@@ -41,10 +43,12 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -327,6 +331,7 @@ func scanFileBytes(path, root string, maxSize int64, scanBinary bool) ([]byte, e
 	if rel, relErr := filepath.Rel(root, path); relErr == nil && rel != "." {
 		display = rel
 	}
+	display = sanitizeValue(display)
 	var b strings.Builder
 	// Matches arrive in ascending Start order, so line/column are
 	// tracked with one cursor instead of rescanning data from the
@@ -361,44 +366,59 @@ func readIfScannable(path string, maxSize int64, scanBinary bool) (data []byte, 
 	if err != nil {
 		return nil, false, err
 	}
-	size := st.Size()
-	if maxSize > 0 && size > maxSize {
+	if maxSize > 0 && st.Size() > maxSize {
 		return nil, false, nil
 	}
 
-	if scanBinary {
-		data, err = io.ReadAll(f)
-		if err != nil {
-			return nil, false, err
-		}
-		return data, true, nil
+	// That size is only a hint: a pipe (`<(git diff)`, a FIFO) reports
+	// 0 and a file being written to can outgrow it. So read to EOF
+	// rather than to that size, stopping one byte past maxSize so that
+	// content over the limit is still skipped.
+	var r io.Reader = f
+	if maxSize > 0 && maxSize < math.MaxInt64 {
+		r = io.LimitReader(f, maxSize+1)
 	}
 
 	// Sniff first 8 KiB for a NUL byte before committing to read
 	// the rest. On large binaries (git packs, archives, prebuilt
 	// executables) this avoids both the IO and the regex pass.
-	sniffN := min(int64(binarySniffSize), size)
-	sniff := make([]byte, sniffN)
-	if _, err = io.ReadFull(f, sniff); err != nil {
+	//
+	// The buffer starts one byte past the stat size, enough to see a
+	// small file end where it should, and only widens to the full
+	// window if there turns out to be more.
+	data = make([]byte, min(st.Size(), binarySniffSize-1)+1)
+	n, err := io.ReadFull(r, data)
+	if err == nil && n < binarySniffSize {
+		data = append(data, make([]byte, binarySniffSize-n)...)
+		var more int
+		more, err = io.ReadFull(r, data[n:])
+		n += more
+	}
+	atEOF := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+	if err != nil && !atEOF {
 		return nil, false, err
 	}
-	if bytes.IndexByte(sniff, 0) >= 0 {
+	data = data[:n]
+	if !scanBinary && bytes.IndexByte(data, 0) >= 0 {
 		return nil, false, nil
 	}
-	if size == sniffN {
-		return sniff, true, nil
+	if !atEOF {
+		rest, err := io.ReadAll(r)
+		if err != nil {
+			return nil, false, err
+		}
+		data = append(data, rest...)
 	}
-	rest, err := io.ReadAll(f)
-	if err != nil {
-		return nil, false, err
+	if maxSize > 0 && int64(len(data)) > maxSize {
+		return nil, false, nil
 	}
-	return append(sniff, rest...), true, nil
+	return data, true, nil
 }
 
 var valueSanitizer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
 
-// sanitizeValue collapses CR / LF in v so a multi-line match (e.g. a
-// PEM block) stays on a single output line.
+// sanitizeValue collapses CR / LF in v, a matched value or a path, so
+// a multi-line match (e.g. a PEM block) stays on a single output line.
 func sanitizeValue(v string) string {
 	if !strings.ContainsAny(v, "\r\n") {
 		return v

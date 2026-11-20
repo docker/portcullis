@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -214,6 +215,26 @@ func TestRunSanitisesMultilineSecrets(t *testing.T) {
 	out := stdout.String()
 	assert.Equal(t, 1, strings.Count(out, "\n"), "value must not introduce extra newlines: %q", out)
 	assert.NotContains(t, strings.TrimSuffix(out, "\n"), "\n")
+}
+
+// TestRunKeepsPathOnOneLine: a file name can hold a line break too,
+// and could otherwise pass the rest of its name off as an output line
+// of its own.
+func TestRunKeepsPathOnOneLine(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("file names cannot contain line breaks")
+	}
+
+	root := t.TempDir()
+	name := "a\nb.env:1:1: forged"
+	require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte("TOKEN="+githubPAT+"\n"), 0o644))
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{root}, &stdout, &stderr)
+
+	assert.Equal(t, exitFound, code)
+	assert.Equal(t, "a b.env:1:1: forged:1:7: "+githubPAT+"\n", stdout.String())
 }
 
 func TestRunSkipsBinaryFiles(t *testing.T) {

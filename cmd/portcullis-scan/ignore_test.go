@@ -72,6 +72,10 @@ func TestRunIgnoreFlagIsRepeatable(t *testing.T) {
 	assert.NotContains(t, out, "leaky_test.go")
 }
 
+// TestRunIgnoresAnchoredPathPattern: as in gitignore, a "/" at the
+// start or in the middle of a pattern anchors it to the scan root.
+// Without the anchor "/secrets" would silently drop every "secrets"
+// directory in the tree from the scan.
 func TestRunIgnoresAnchoredPathPattern(t *testing.T) {
 	t.Parallel()
 
@@ -83,13 +87,13 @@ func TestRunIgnoresAnchoredPathPattern(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "secrets", "g.txt"),
 		[]byte(githubPAT), 0o644))
 
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"-ignore", "secrets/**", root}, &stdout, &stderr)
+	for _, pattern := range []string{"secrets/**", "/secrets/**", "/secrets", "/secrets/"} {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"-ignore", pattern, root}, &stdout, &stderr)
 
-	assert.Equal(t, exitFound, code)
-	out := stdout.String()
-	assert.Contains(t, out, filepath.Join("a", "secrets", "f.txt"))
-	assert.NotContains(t, out, filepath.Join("secrets", "g.txt"))
+		assert.Equal(t, exitFound, code, pattern)
+		assert.Equal(t, filepath.Join("a", "secrets", "f.txt")+":1:1: "+githubPAT+"\n", stdout.String(), pattern)
+	}
 }
 
 func TestRunRejectsInvalidIgnorePattern(t *testing.T) {
@@ -125,6 +129,10 @@ func TestIgnoreMatcher(t *testing.T) {
 		{"double star prefix at root", []string{"**/foo.txt"}, "foo.txt", "foo.txt", false, true},
 		{"single star is single segment", []string{"a/*.go"}, "a/b/c.go", "c.go", false, false},
 		{"question mark", []string{"?.go"}, "a.go", "a.go", false, true},
+		{"leading slash at root", []string{"/build"}, "build", "build", true, true},
+		{"leading slash is anchored", []string{"/build"}, "src/build", "build", true, false},
+		{"leading slash with star", []string{"/*.env"}, "sub/prod.env", "prod.env", false, false},
+		{"leading slash dir-only on file", []string{"/build/"}, "build", "build", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

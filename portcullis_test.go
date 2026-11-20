@@ -1,6 +1,9 @@
 package portcullis_test
 
 import (
+	"encoding/base64"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -115,7 +118,9 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"gitlab_runner_authentication_token", "glrt-" + strings.Repeat("a", 20)},
 		{"gitlab_scim_token", "glsoat-" + strings.Repeat("a", 20)},
 		{"gitlab_pat_routable", "glpat-" + strings.Repeat("a", 50) + ".aa1234567"},
-		{"aws_bedrock_long_lived_key", "ABSK" + strings.Repeat("a", 200)},
+		// The body has to decode to a Bedrock envelope: a run of
+		// filler after `ABSK` only passes by tripping the Twilio rule.
+		{"aws_bedrock_long_lived_key", "AB" + "SK" + base64.StdEncoding.EncodeToString([]byte("BedrockAPIKey-"+strings.Repeat("A", 82)))},
 		{"aws_bedrock_short_lived_key", "bedrock-api-key-" + "YmVkcm9jay5hbWF6b25hd3MuY29t" + strings.Repeat("a", 60)},
 		{"heroku_api_key_v2", "HRKU-AA" + strings.Repeat("a", 58)},
 		{"azure_ad_client_secret", "abc" + "1Q~" + strings.Repeat("a", 33)},
@@ -277,6 +282,8 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 			assert.NotContainsf(t, out, tc.text, "raw secret must be gone after Redact: %q", out)
 			assert.Containsf(t, out, portcullis.Marker,
 				"redaction marker must appear in %q", out)
+			assert.Falsef(t, portcullis.Contains(out),
+				"redacted output must no longer trip Contains: %q", out)
 		})
 	}
 }
@@ -438,6 +445,133 @@ func TestRedactDoesNotSwallowAdjacentTextAfterSlackRotatingToken(t *testing.T) {
 		"adjacent hostname must NOT be swallowed by the rotating-token regex: %q", out)
 }
 
+// TestRedactCoversWholeSlackAccessToken pins the span of the
+// slack-access-token rule. Slack tokens are dash-separated and the
+// secret is the last segment (`xoxb-<team id>-<bot id>-<secret>`), so
+// a match that stops at the first dash leaves the secret in the
+// output.
+func TestRedactCoversWholeSlackAccessToken(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		token string
+	}{
+		{"bot", "xoxb-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("a", 24)},
+		{"user", "xoxp-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("3", 13) + "-" + strings.Repeat("f", 32)},
+		{"session", "xoxs-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 11) + "-" + strings.Repeat("3", 11) + "-" + strings.Repeat("f", 64)},
+		{"single_segment", "xoxa-" + strings.Repeat("a", 24)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			in := "SLACK_TOKEN=" + tc.token + " and the rest of the line"
+
+			assert.Equal(t, "SLACK_TOKEN="+portcullis.Marker+" and the rest of the line", portcullis.Redact(in))
+			matches := portcullis.Find(in)
+			require.Len(t, matches, 1)
+			assert.Equal(t, tc.token, matches[0].Value)
+		})
+	}
+
+	// The first segment still has to look like an ID, so the
+	// placeholder found in every Slack tutorial keeps passing through.
+	assert.False(t, portcullis.Contains("xoxb-your-token-here"))
+}
+
+// TestSlackAccessTokenStopsAtItsLastSegment: the match must not run
+// on into whatever is hyphenated onto a token, least of all into the
+// prefix of a second token, which would then go undetected.
+func TestSlackAccessTokenStopsAtItsLastSegment(t *testing.T) {
+	t.Parallel()
+
+	user := "xoxp-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("3", 13) + "-" + strings.Repeat("f", 32)
+	bot := "xoxb-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("a", 24)
+	legacy := "xoxa-" + strings.Repeat("a", 24)
+
+	assert.Equal(t, portcullis.Marker+"-retry-count", portcullis.Redact(user+"-retry-count"))
+	assert.Equal(t, portcullis.Marker+"-retry-count", portcullis.Redact(bot+"-retry-count"))
+
+	for _, second := range []string{user, bot, legacy} {
+		matches := portcullis.Find(user + "-" + second)
+		require.Len(t, matches, 2)
+		assert.Equal(t, user, matches[0].Value)
+		assert.Equal(t, second, matches[1].Value)
+	}
+}
+
+// TestRedactCoversGluedSlackAccessTokens: with no separator at all,
+// the last segment of a token takes the `xoxb` of the next one. What
+// is left of that one must not stay behind in clear.
+func TestRedactCoversGluedSlackAccessTokens(t *testing.T) {
+	t.Parallel()
+
+	user := "xoxp-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("3", 13) + "-" + strings.Repeat("f", 32)
+	bot := "xoxb-" + strings.Repeat("1", 11) + "-" + strings.Repeat("2", 13) + "-" + strings.Repeat("a", 24)
+	legacy := "xoxa-" + strings.Repeat("b", 24)
+
+	for _, glued := range []string{bot + legacy, legacy + bot, user + bot + legacy, legacy + legacy} {
+		assert.Equal(t, "token="+portcullis.Marker+" end", portcullis.Redact("token="+glued+" end"), glued)
+		matches := portcullis.Find(glued)
+		require.Len(t, matches, 1, glued)
+		assert.Equal(t, glued, matches[0].Value)
+	}
+}
+
+// TestRedactCoversWholeStripeKey pins the body length of the Stripe
+// secret and restricted key rules. Current keys (`sk_live_51…`) carry
+// a 99-character body, so a lower cap leaves the tail of the key in
+// the output.
+func TestRedactCoversWholeStripeKey(t *testing.T) {
+	t.Parallel()
+
+	for _, prefix := range []string{"sk_live_", "sk_test_", "sk_prod_", "rk_live_", "rk_test_", "rk_prod_"} {
+		t.Run(prefix, func(t *testing.T) {
+			t.Parallel()
+
+			key := prefix + "51" + strings.Repeat("aB3", 32) + "x"
+			in := "STRIPE_KEY=" + key + " and the rest of the line"
+
+			assert.Equal(t, "STRIPE_KEY="+portcullis.Marker+" and the rest of the line", portcullis.Redact(in))
+			matches := portcullis.Find(in)
+			require.Len(t, matches, 1)
+			assert.Equal(t, key, matches[0].Value)
+		})
+	}
+}
+
+// TestRedactCoversGluedStripeKeys: with no separator between two
+// keys, the body of the first takes the `sk` / `rk` of the second.
+// What is left of the second key must not stay behind in clear.
+func TestRedactCoversGluedStripeKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, prefixes := range [][2]string{
+		{"sk_live_", "sk_live_"},
+		{"sk_live_", "rk_test_"},
+		{"rk_prod_", "sk_test_"},
+	} {
+		// 247 is the body ceiling: just under it, the first body has
+		// room for only part of the next prefix.
+		for _, bodyLen := range []int{24, 32, 99, 245, 246, 247} {
+			glued := prefixes[0] + strings.Repeat("a", bodyLen) +
+				prefixes[1] + strings.Repeat("b", bodyLen) +
+				prefixes[0] + strings.Repeat("c", bodyLen)
+
+			assert.Equal(t, "key="+portcullis.Marker+" end", portcullis.Redact("key="+glued+" end"), glued)
+			matches := portcullis.Find(glued)
+			require.Len(t, matches, 1, glued)
+			assert.Equal(t, glued, matches[0].Value)
+		}
+	}
+
+	// Only another key carries the match on. An environment-looking
+	// suffix is not one.
+	key := "sk_live_" + strings.Repeat("a", 24)
+	assert.Equal(t, portcullis.Marker+"_prod_environment", portcullis.Redact(key+"_prod_environment"))
+}
+
 // TestRedactDoesNotSwallowAdjacentTextAfterPrefixedTokens pins the
 // upper bounds of the rules whose bodies share a character class
 // with arbitrary trailing text. Without an explicit ceiling on the
@@ -492,6 +626,31 @@ func TestRedactDoesNotSwallowAdjacentTextAfterPrefixedTokens(t *testing.T) {
 				tc.name, out)
 		})
 	}
+}
+
+// TestREADMEExample checks the inputs and results shown at the top of
+// the README, the first thing a new user pastes. It once kept showing
+// a GitHub token that the checksum validator had stopped accepting.
+func TestREADMEExample(t *testing.T) {
+	t.Parallel()
+
+	const (
+		in      = "Run this with AWS_ACCESS_KEY_ID=AKIARZPUZDIKQEXAMPLE please."
+		out     = "Run this with AWS_ACCESS_KEY_ID=[REDACTED] please."
+		clean   = "not a secret"
+		leaking = "AWS_ACCESS_KEY_ID=AKIARZPUZDIKQEXAMPLE"
+	)
+	readme, err := os.ReadFile("README.md")
+	require.NoError(t, err)
+	for _, literal := range []string{in, out, clean, leaking} {
+		if quoted := strconv.Quote(literal); !strings.Contains(string(readme), quoted) {
+			t.Fatalf("README.md no longer shows %s: update this test along with it", quoted)
+		}
+	}
+
+	assert.Equal(t, out, portcullis.Redact(in))
+	assert.False(t, portcullis.Contains(clean))
+	assert.True(t, portcullis.Contains(leaking))
 }
 
 // TestContainsIgnoresHarmlessText: pure digit strings, plain English,
@@ -604,6 +763,36 @@ func TestMarkerIsNotASecret(t *testing.T) {
 	// match — some rules only fire mid-string after a non-word boundary.
 	assert.Equal(t, "prefix "+portcullis.Marker+" suffix",
 		portcullis.Redact("prefix "+portcullis.Marker+" suffix"))
+}
+
+// TestMarkerInSecretPositionIsNotASecret covers the rules whose secret
+// class is broad enough to match the marker itself, such as the
+// password of a connection string. Reporting it would make every
+// already-redacted connection string look like a leak.
+func TestMarkerInSecretPositionIsNotASecret(t *testing.T) {
+	t.Parallel()
+
+	redacted := "redis://:" + portcullis.Marker + "@cache.example.com:6379"
+
+	assert.False(t, portcullis.Contains(redacted))
+	assert.Empty(t, portcullis.Find(redacted))
+	assert.Equal(t, redacted, portcullis.Redact(redacted))
+
+	// A real secret is still reported: one that another rule finds
+	// next to the marker, one that the same rule finds after it, and
+	// one wrapped around it.
+	pat := "dckr_pat_" + strings.Repeat("A", 27)
+	matches := portcullis.Find(redacted + " " + pat)
+	require.Len(t, matches, 1)
+	assert.Equal(t, pat, matches[0].Value)
+	assert.True(t, portcullis.Contains(redacted+" "+pat))
+
+	matches = portcullis.Find(redacted + " " + redacted + " redis://:hunter2hunter2@replica.example.com:6379")
+	require.Len(t, matches, 1)
+	assert.Equal(t, "hunter2hunter2", matches[0].Value)
+	assert.True(t, portcullis.Contains(redacted+" "+redacted+" redis://:hunter2hunter2@replica.example.com:6379"))
+
+	assert.True(t, portcullis.Contains("redis://:hunter2"+portcullis.Marker+"@cache.example.com:6379"))
 }
 
 // TestRedactDetectsSecretsAcrossWordBoundaries exercises the change

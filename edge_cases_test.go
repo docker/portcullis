@@ -65,12 +65,14 @@ func TestNoisyKeywordsFalsePositives(t *testing.T) {
 	}
 }
 
-// TestDiscordTokenPrefixes verifies all documented Discord bot token prefixes.
+// TestDiscordTokenPrefixes verifies every prefix a Discord bot token
+// can start with. The first segment is the base64 of the bot's numeric
+// ID, so the leading decimal digit (1-9) fixes the first two
+// characters.
 func TestDiscordTokenPrefixes(t *testing.T) {
 	t.Parallel()
 
-	// Test all documented prefixes
-	prefixes := []string{"MT", "Mz", "ND", "NT", "Nz", "OD"}
+	prefixes := []string{"MT", "Mj", "Mz", "ND", "NT", "Nj", "Nz", "OD", "OT"}
 
 	for _, prefix := range prefixes {
 		t.Run("prefix_"+prefix, func(t *testing.T) {
@@ -80,6 +82,18 @@ func TestDiscordTokenPrefixes(t *testing.T) {
 				"should detect Discord token with prefix %s", prefix)
 		})
 	}
+}
+
+// TestDiscordTokenNeedsItsPrefix: a prefix elsewhere in the input gets
+// the rule past the keyword filter, but must not make a token out of
+// a dotted identifier that doesn't start with one itself.
+func TestDiscordTokenNeedsItsPrefix(t *testing.T) {
+	t.Parallel()
+
+	in := "NOTE M" + strings.Repeat("a", 23) + "." + strings.Repeat("B", 6) + "." + strings.Repeat("C", 30)
+
+	assert.False(t, portcullis.Contains(in))
+	assert.Equal(t, in, portcullis.Redact(in))
 }
 
 // TestConnectionStringContextPreservation verifies that MongoDB, Postgres,

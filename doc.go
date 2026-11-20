@@ -1,18 +1,19 @@
 // Package portcullis detects and redacts API tokens, cloud
 // credentials, and other secret material in arbitrary text.
 //
-// [Contains] reports whether any rule matches the input;
-// [Redact] replaces every detected secret span with [Marker]
-// while preserving the surrounding text. Both are safe for
-// concurrent use and idempotent.
+// [Contains] reports whether any rule matches the input; [Find]
+// returns the detected secret spans, the longest of those that
+// overlap; [Redact] replaces every detected span with [Marker]
+// while preserving the surrounding text. All three are safe for
+// concurrent use, and [Redact] is idempotent.
 //
 // # Performance
 //
 // Detection runs in O(len(text)) per rule via Go's RE2-based
 // [regexp] engine, gated by an Aho–Corasick keyword pre-filter so
-// clean inputs typically don't compile or run any regex. Memory
-// allocations are zero on a clean input and small (a few hundred
-// bytes) on a secret-bearing one.
+// clean inputs typically don't compile or run any regex, and then
+// allocate nothing. On a secret-bearing input [Redact] allocates
+// for the matches it finds and the redacted copy.
 //
 // # Caller responsibilities
 //

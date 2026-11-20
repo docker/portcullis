@@ -39,12 +39,12 @@ type rule struct {
 	keywords      []string
 	caseSensitive bool
 	validator     func(string) bool
-	// prefilter is a cheap necessary-condition byte scan for
-	// keywordless rules, which the AC pre-filter can't gate. When set,
-	// the rule's regex only runs on inputs the prefilter accepts; it
-	// must never reject an input the regex would match. Ignored for
-	// rules that carry keywords.
-	prefilter func(string) bool
+	// shape is a cheap necessary condition for keywordless rules,
+	// which the AC pre-filter can't gate. When set, the rule's regex
+	// only runs on inputs where [scanShapes] finds that shape; it
+	// must never be missing from an input the regex would match.
+	// Ignored for rules that carry keywords.
+	shape shapes
 }
 
 // asSecretGroup wraps a `?P<secret>…` fragment in a plain group so
@@ -86,6 +86,28 @@ func contextual(vendor, body string) string {
 	return `(?i)(?:` + vendor + `)(?:[ \t\w.-]{0,20})[\s'"]{0,3}` +
 		`(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}` +
 		`(?P<secret>` + body + `)(?:[\x60'"\s;]|\\[nr]|$)`
+}
+
+// chain matches head then body, and carries on over every further
+// link and body glued to them without a separator. A body's character
+// class also takes the first characters of a token that follows it
+// directly (the `sk` of `sk_live_…`), so a match that ended with the
+// first body would leave the rest of the second token unmatched and
+// in clear. A run of glued tokens comes out as a single match. It
+// ends early at a token too short to match without those borrowed
+// characters, which nothing short of lookahead can tell apart.
+func chain(head, link, body string) string {
+	return head + `(?:` + body + link + `)*` + body
+}
+
+// stripeKey builds the expression of the Stripe secret (`sk`) and
+// restricted (`rk`) key rules: `<prefix>_<env>_<body>`. Current keys
+// (`sk_live_51…`) carry a 99-character body where the original format
+// had 24, and a ceiling that is too low leaves the tail of a key in
+// clear, so it sits at TruffleHog's 247.
+func stripeKey(prefix string) string {
+	const env = `_(?:test|live|prod)_`
+	return `(?i)` + chain(prefix+env, `[sr]k`+env, `[0-9a-z]{10,247}`)
 }
 
 // rules is the source-form catalogue, kept verbatim from upstream so
@@ -177,8 +199,14 @@ func rules() []rule {
 			keywords:   []string{"shpss_", "shpat_", "shpca_", "shppa_"},
 		},
 		{
-			// slack-access-token
-			expression: asSecretGroup(`?P<secret>xox[baprs]-([0-9a-zA-Z]{10,48})`),
+			// slack-access-token. Slack tokens are dash-separated: one to
+			// three numeric IDs, then the secret (`xoxb-<team id>-<bot
+			// id>-<secret>`, `xoxp-<team id>-<user id>-<id>-<secret>`).
+			// The match has to reach that last segment, or the redaction
+			// leaves the secret itself in clear. It stops there too, so
+			// whatever is hyphenated onto a token stays out of it. The
+			// second alternative is the original single-segment shape.
+			expression: asSecretGroup(`?P<secret>` + chain(`xox[baprs]-`, `xox[baprs]-`, `(?:(?:[0-9]{8,14}-){1,3}[0-9a-zA-Z]{18,128}|[0-9a-zA-Z]{10,48})`)),
 			keywords:   []string{"xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"},
 		},
 		{
@@ -188,7 +216,7 @@ func rules() []rule {
 			// intentionally NOT redacted: Stripe publishable keys are
 			// designed to be embedded in client-side code and are not
 			// considered secret.
-			expression: asSecretGroup(`?P<secret>(?i)sk_(test|live|prod)_[0-9a-z]{10,32}`),
+			expression: asSecretGroup(`?P<secret>` + stripeKey(`sk`)),
 			keywords:   []string{"sk_test_", "sk_live_", "sk_prod_"},
 		},
 		{
@@ -675,7 +703,7 @@ func rules() []rule {
 			// a restricted key still grants the scoped Stripe permissions
 			// it was issued with, so it must be redacted. The `prod` env
 			// tag was added in 2024 alongside the `test` / `live` modes.
-			expression: `(?i)rk_(test|live|prod)_[0-9a-z]{10,32}`,
+			expression: stripeKey(`rk`),
 			keywords:   []string{"rk_test_", "rk_live_", "rk_prod_"},
 		},
 		{
@@ -748,20 +776,21 @@ func rules() []rule {
 			// discord-bot-token. Three-part dotted format issued for bot
 			// applications: `<base64 snowflake>.<6-char timestamp>.<27+
 			// char HMAC>`. The first segment is the bot's user-ID base64
-			// encoded; current Discord IDs (2018 onwards) base64 to a
-			// leading `MT`/`Mz`/`ND`/`NT`/`Nz`/`OD` byte pair, which we
-			// list as keywords so the AC pre-filter still skips inputs
-			// without a plausible token prefix. The structural shape
-			// (M-or-N-or-O-prefixed body, two literal dots, fixed segment
-			// widths) keeps the regex itself specific.
+			// encoded, so the ID's leading decimal digit (1-9) fixes its
+			// first two characters: `MT`/`Mj`/`Mz`/`ND`/`NT`/`Nj`/`Nz`/
+			// `OD`/`OT`. The regex requires one of the nine, and we list
+			// them as keywords so the AC pre-filter still skips inputs
+			// without a plausible token prefix. Together with the two
+			// literal dots and the fixed segment widths, that keeps the
+			// rule specific.
 			//
 			// caseSensitive is critical here: the lower-cased forms of
 			// these two-letter prefixes (`mt`, `nd`, `od`, …) are common
 			// English bigrams and trip the keyword pre-filter on ~30% of
 			// arbitrary text files. Pinning the case lets the AC pass
 			// drop the regex run on those files.
-			expression:    `[MNO][A-Za-z\d_-]{23,25}\.[\w-]{6,7}\.[\w-]{27,38}`,
-			keywords:      []string{"MT", "Mz", "ND", "NT", "Nz", "OD"},
+			expression:    `(?:M[Tjz]|N[DTjz]|O[DT])[A-Za-z\d_-]{22,24}\.[\w-]{6,7}\.[\w-]{27,38}`,
+			keywords:      []string{"MT", "Mj", "Mz", "ND", "NT", "Nj", "Nz", "OD", "OT"},
 			caseSensitive: true,
 		},
 		{
@@ -1961,7 +1990,7 @@ func rules() []rule {
 			// not get redacted as cards.
 			expression: `(?P<secret>\b(?:4\d{3}|5[1-5]\d{2}|2[2-7]\d{2}|3[47]\d{2}|6(?:011|5\d{2})|3(?:0[0-5]|[68]\d)\d)(?:[-\s]?\d){9,15}\b)`,
 			validator:  validLuhn,
-			prefilter:  maybeCreditCard,
+			shape:      shapeCard,
 		},
 		{
 			// iban. Mirrors memclaw's IBAN detector: broad ISO 13616
@@ -1969,9 +1998,12 @@ func rules() []rule {
 			// would let a match run into the next line), gated by the
 			// registered country code and length and the official mod-97
 			// checksum to avoid flagging arbitrary account-like strings.
-			expression: `(?i)(?P<secret>\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b)`,
+			// Both cases are spelled out rather than folded with `(?i)`,
+			// which would also let `ſ` and the Kelvin sign in as letters,
+			// past the ASCII ones [shapeIBAN] looks for.
+			expression: `(?P<secret>\b[A-Za-z]{2}\d{2}(?:[ ]?[A-Za-z0-9]{4}){2,7}(?:[ ]?[A-Za-z0-9]{1,3})?\b)`,
 			validator:  validIBAN,
-			prefilter:  maybeIBAN,
+			shape:      shapeIBAN,
 		},
 		{
 			// us-ssn. Mirrors memclaw's national-ID rule for US Social
@@ -1979,7 +2011,7 @@ func rules() []rule {
 			// area / group / serial ranges (000, 666, 9xx, 00, 0000).
 			expression: `(?P<secret>\b\d{3}[- ]?\d{2}[- ]?\d{4}\b)`,
 			validator:  validUSSSN,
-			prefilter:  maybeSSN,
+			shape:      shapeSSN,
 		},
 
 		{
@@ -1993,12 +2025,30 @@ func rules() []rule {
 	}
 }
 
+// compiledMatch is what [compiledRule.compile] yields: the rule's
+// regex, the index of its `secret` subgroup (-1 without one) and its
+// optional validator.
+type compiledMatch struct {
+	re        *regexp.Regexp
+	secretIdx int
+	validator func(string) bool
+}
+
+// accepts reports whether value, a span matched by the rule's regex,
+// is a secret: it has to pass the rule's validator, and it must not
+// be the [Marker] itself, which broad classes such as a
+// connection-string password match in already-redacted text.
+func (c *compiledMatch) accepts(value string) bool {
+	return value != Marker && (c.validator == nil || c.validator(value))
+}
+
 // compiledRule is the runtime form of a [rule]: its keywords are
 // folded into a [kwMask] over the catalogue's shared keyword index,
-// and its regex is compiled lazily on first match. A clean input —
-// the overwhelmingly common case — only runs the small set of
-// keywordless validator-gated PII expressions; all keyworded secret
-// rules still stay behind the AC pre-filter.
+// and its regex is compiled lazily, the first time an input gets
+// past the rule's gate. An input with no keyword and no PII shape —
+// the overwhelmingly common case — runs no expression at all: the
+// keyworded secret rules stay behind the AC pre-filter and the
+// keywordless PII ones behind their [rule.shape].
 //
 // caseSensitive, when true, requires the post-filter step (see
 // [compiledRule.passes]) to find at least one of [csKW] verbatim
@@ -2006,32 +2056,26 @@ func rules() []rule {
 // already matched. This avoids running the regex on every file
 // that happens to contain a folded form of a CS keyword (e.g. the
 // English bigrams `mt`/`nd`/`od` for Discord, `sk` for Twilio).
-type compiledMatch struct {
-	re        *regexp.Regexp
-	secretIdx int
-	validator func(string) bool
-}
-
 type compiledRule struct {
 	kwBits        kwMask
 	caseSensitive bool
 	csKW          []string
-	prefilter     func(string) bool
+	shape         shapes
 	compile       func() compiledMatch // memoised
 }
 
 // passes returns true when the rule should run its regex against
-// text: keywordless rules run whenever their cheap [rule.prefilter]
-// byte scan accepts the input (a necessary condition for the regex to
-// match, so clean prose skips the expensive expression); otherwise
+// text: keywordless rules run whenever the input has their cheap
+// [rule.shape] (a necessary condition for the regex to match, so
+// clean prose skips the expensive expression); otherwise
 // the AC pre-filter must have matched, and — for case-sensitive
 // rules — at least one keyword must appear in the original input
 // without the case-fold. The post-filter cost is one
 // [strings.Contains] per CS keyword, two orders of magnitude
 // cheaper than running the rule's regex over the whole file.
-func (r *compiledRule) passes(found kwMask, text string) bool {
+func (r *compiledRule) passes(found kwMask, seen *lazyShapes, text string) bool {
 	if r.kwBits.empty() {
-		return r.prefilter == nil || r.prefilter(text)
+		return r.shape == 0 || seen.has(text, r.shape)
 	}
 	if !found.overlaps(r.kwBits) {
 		return false
@@ -2095,7 +2139,7 @@ var compiledRuleSet = sync.OnceValue(func() *ruleSet {
 			kwBits:        bits,
 			caseSensitive: r.caseSensitive,
 			csKW:          r.keywords,
-			prefilter:     r.prefilter,
+			shape:         r.shape,
 			compile: sync.OnceValue(func() compiledMatch {
 				re := regexp.MustCompile(expr)
 				return compiledMatch{re: re, secretIdx: re.SubexpIndex("secret"), validator: validator}

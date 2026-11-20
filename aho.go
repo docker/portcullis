@@ -4,7 +4,7 @@ package portcullis
 // which patterns occurred in a scanned input and which keywords each
 // rule subscribes to. Storing it as a small array keeps every test
 // branch-free; the cap of len(kwMask)*64 indices (currently 320)
-// accommodates today's catalogue of ~285 unique keywords with limited
+// accommodates today's catalogue of ~295 unique keywords with limited
 // remaining headroom for future rules (an overflow trips a
 // deterministic panic in [buildAhoCorasick]).
 type kwMask [5]uint64

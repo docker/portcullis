@@ -15,11 +15,11 @@ import (
 //   - "**" matches any run of characters, including separators
 //   - "[...]" character class (passed through to the regexp engine)
 //
-// A pattern containing "/" is anchored to the scan root and matched
-// against the slash-separated relative path; otherwise it matches
-// the basename of every entry. A trailing "/" restricts the rule to
-// directories. A "X/**" rule also prunes "X" itself so its subtree
-// is not walked.
+// A pattern with a "/" at its start or in its middle is anchored to
+// the scan root and matched against the slash-separated relative
+// path; otherwise it matches the basename of every entry. A trailing
+// "/" restricts the rule to directories. A "X/**" rule also prunes
+// "X" itself so its subtree is not walked.
 type ignoreMatcher struct {
 	rules []ignoreRule
 }
@@ -39,11 +39,14 @@ func newIgnoreMatcher(patterns []string) (*ignoreMatcher, error) {
 		}
 		dirOnly := strings.HasSuffix(p, "/")
 		p = strings.TrimSuffix(p, "/")
-		p = strings.TrimPrefix(p, "/")
+		// A leading "/" anchors a pattern even when it has no other
+		// separator: "/build" is the root's build, not every build
+		// in the tree.
+		p, anchored := strings.CutPrefix(p, "/")
 		if p == "" {
 			continue
 		}
-		pathMode := strings.Contains(p, "/")
+		pathMode := anchored || strings.Contains(p, "/")
 		re, err := compileGlob(p)
 		if err != nil {
 			return nil, fmt.Errorf("invalid ignore pattern %q: %w", raw, err)
