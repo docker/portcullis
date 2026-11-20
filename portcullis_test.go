@@ -1,6 +1,7 @@
 package portcullis_test
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -115,7 +116,9 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 		{"gitlab_runner_authentication_token", "glrt-" + strings.Repeat("a", 20)},
 		{"gitlab_scim_token", "glsoat-" + strings.Repeat("a", 20)},
 		{"gitlab_pat_routable", "glpat-" + strings.Repeat("a", 50) + ".aa1234567"},
-		{"aws_bedrock_long_lived_key", "ABSK" + strings.Repeat("a", 200)},
+		// The body has to decode to a Bedrock envelope: a run of
+		// filler after `ABSK` only passes by tripping the Twilio rule.
+		{"aws_bedrock_long_lived_key", "AB" + "SK" + base64.StdEncoding.EncodeToString([]byte("BedrockAPIKey-"+strings.Repeat("A", 82)))},
 		{"aws_bedrock_short_lived_key", "bedrock-api-key-" + "YmVkcm9jay5hbWF6b25hd3MuY29t" + strings.Repeat("a", 60)},
 		{"heroku_api_key_v2", "HRKU-AA" + strings.Repeat("a", 58)},
 		{"azure_ad_client_secret", "abc" + "1Q~" + strings.Repeat("a", 33)},
