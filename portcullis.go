@@ -9,7 +9,9 @@ import (
 
 // Marker replaces every detected secret span. Chosen so it doesn't
 // match any rule's keyword pre-filter — see TestMarkerIsNotASecret
-// for the safety property that makes [Redact] idempotent.
+// for the safety property that makes [Redact] idempotent. A marker
+// sitting where a rule expects a secret (the password of an
+// already-redacted connection string, say) is never reported as one.
 const Marker = "[REDACTED]"
 
 // Match describes a single secret span detected in an input. Start
@@ -72,7 +74,7 @@ func findMatches(text string) []Match {
 				continue
 			}
 			value := text[s:e]
-			if compiled.validator != nil && !compiled.validator(value) {
+			if !compiled.accepts(value) {
 				continue
 			}
 			matches = append(matches, Match{Start: s, End: e, Value: value})
@@ -130,21 +132,32 @@ func Contains(text string) bool {
 	if !ok {
 		return false
 	}
+	// MatchString can't tell a secret from the marker a previous
+	// Redact left in its place, so that shortcut is reserved for
+	// marker-free input.
+	markers := strings.Count(text, Marker)
 	for i := range rs.rules {
 		r := &rs.rules[i]
 		if !r.passes(found, text) {
 			continue
 		}
 		compiled := r.compile()
-		if compiled.validator == nil {
+		if compiled.validator == nil && markers == 0 {
 			if compiled.re.MatchString(text) {
 				return true
 			}
 			continue
 		}
-		for _, m := range compiled.re.FindAllStringSubmatchIndex(text, -1) {
+		// A validator can reject any number of matches. Without one
+		// only markers are rejected, one match per marker at most, so
+		// the match after those settles it.
+		limit := -1
+		if compiled.validator == nil {
+			limit = markers + 1
+		}
+		for _, m := range compiled.re.FindAllStringSubmatchIndex(text, limit) {
 			s, e := redactSpan(m, compiled.secretIdx)
-			if compiled.validator(text[s:e]) {
+			if compiled.accepts(text[s:e]) {
 				return true
 			}
 		}

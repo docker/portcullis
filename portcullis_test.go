@@ -277,6 +277,8 @@ func TestContainsRecognisesKnownTokens(t *testing.T) {
 			assert.NotContainsf(t, out, tc.text, "raw secret must be gone after Redact: %q", out)
 			assert.Containsf(t, out, portcullis.Marker,
 				"redaction marker must appear in %q", out)
+			assert.Falsef(t, portcullis.Contains(out),
+				"redacted output must no longer trip Contains: %q", out)
 		})
 	}
 }
@@ -731,6 +733,36 @@ func TestMarkerIsNotASecret(t *testing.T) {
 	// match — some rules only fire mid-string after a non-word boundary.
 	assert.Equal(t, "prefix "+portcullis.Marker+" suffix",
 		portcullis.Redact("prefix "+portcullis.Marker+" suffix"))
+}
+
+// TestMarkerInSecretPositionIsNotASecret covers the rules whose secret
+// class is broad enough to match the marker itself, such as the
+// password of a connection string. Reporting it would make every
+// already-redacted connection string look like a leak.
+func TestMarkerInSecretPositionIsNotASecret(t *testing.T) {
+	t.Parallel()
+
+	redacted := "redis://:" + portcullis.Marker + "@cache.example.com:6379"
+
+	assert.False(t, portcullis.Contains(redacted))
+	assert.Empty(t, portcullis.Find(redacted))
+	assert.Equal(t, redacted, portcullis.Redact(redacted))
+
+	// A real secret is still reported: one that another rule finds
+	// next to the marker, one that the same rule finds after it, and
+	// one wrapped around it.
+	pat := "dckr_pat_" + strings.Repeat("A", 27)
+	matches := portcullis.Find(redacted + " " + pat)
+	require.Len(t, matches, 1)
+	assert.Equal(t, pat, matches[0].Value)
+	assert.True(t, portcullis.Contains(redacted+" "+pat))
+
+	matches = portcullis.Find(redacted + " " + redacted + " redis://:hunter2hunter2@replica.example.com:6379")
+	require.Len(t, matches, 1)
+	assert.Equal(t, "hunter2hunter2", matches[0].Value)
+	assert.True(t, portcullis.Contains(redacted+" "+redacted+" redis://:hunter2hunter2@replica.example.com:6379"))
+
+	assert.True(t, portcullis.Contains("redis://:hunter2"+portcullis.Marker+"@cache.example.com:6379"))
 }
 
 // TestRedactDetectsSecretsAcrossWordBoundaries exercises the change

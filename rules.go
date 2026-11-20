@@ -2041,6 +2041,14 @@ type compiledMatch struct {
 	validator func(string) bool
 }
 
+// accepts reports whether value, a span matched by the rule's regex,
+// is a secret: it has to pass the rule's validator, and it must not
+// be the [Marker] itself, which broad classes such as a
+// connection-string password match in already-redacted text.
+func (c *compiledMatch) accepts(value string) bool {
+	return value != Marker && (c.validator == nil || c.validator(value))
+}
+
 type compiledRule struct {
 	kwBits        kwMask
 	caseSensitive bool
