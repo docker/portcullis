@@ -7,8 +7,9 @@
 //	<path>:<line>:<col>: <value>
 //
 // Paths are relative to the scan root. Newlines and carriage returns
-// inside a matched value are collapsed to spaces so each match
-// remains on a single line; this only affects display, not detection.
+// inside a path or a matched value are collapsed to spaces so each
+// match remains on a single line; this only affects display, not
+// detection.
 // Files are scanned in parallel; output order matches the walker's
 // lexical order, so two runs over the same tree produce identical
 // output regardless of worker count or scheduling.
@@ -330,6 +331,7 @@ func scanFileBytes(path, root string, maxSize int64, scanBinary bool) ([]byte, e
 	if rel, relErr := filepath.Rel(root, path); relErr == nil && rel != "." {
 		display = rel
 	}
+	display = sanitizeValue(display)
 	var b strings.Builder
 	// Matches arrive in ascending Start order, so line/column are
 	// tracked with one cursor instead of rescanning data from the
@@ -415,8 +417,8 @@ func readIfScannable(path string, maxSize int64, scanBinary bool) (data []byte, 
 
 var valueSanitizer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
 
-// sanitizeValue collapses CR / LF in v so a multi-line match (e.g. a
-// PEM block) stays on a single output line.
+// sanitizeValue collapses CR / LF in v, a matched value or a path, so
+// a multi-line match (e.g. a PEM block) stays on a single output line.
 func sanitizeValue(v string) string {
 	if !strings.ContainsAny(v, "\r\n") {
 		return v
