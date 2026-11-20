@@ -2025,19 +2025,9 @@ func rules() []rule {
 	}
 }
 
-// compiledRule is the runtime form of a [rule]: its keywords are
-// folded into a [kwMask] over the catalogue's shared keyword index,
-// and its regex is compiled lazily on first match. A clean input —
-// the overwhelmingly common case — only runs the small set of
-// keywordless validator-gated PII expressions; all keyworded secret
-// rules still stay behind the AC pre-filter.
-//
-// caseSensitive, when true, requires the post-filter step (see
-// [compiledRule.passes]) to find at least one of [csKW] verbatim
-// in the original-case input — not the case-folded form the AC
-// already matched. This avoids running the regex on every file
-// that happens to contain a folded form of a CS keyword (e.g. the
-// English bigrams `mt`/`nd`/`od` for Discord, `sk` for Twilio).
+// compiledMatch is what [compiledRule.compile] yields: the rule's
+// regex, the index of its `secret` subgroup (-1 without one) and its
+// optional validator.
 type compiledMatch struct {
 	re        *regexp.Regexp
 	secretIdx int
@@ -2052,6 +2042,20 @@ func (c *compiledMatch) accepts(value string) bool {
 	return value != Marker && (c.validator == nil || c.validator(value))
 }
 
+// compiledRule is the runtime form of a [rule]: its keywords are
+// folded into a [kwMask] over the catalogue's shared keyword index,
+// and its regex is compiled lazily, the first time an input gets
+// past the rule's gate. An input with no keyword and no PII shape —
+// the overwhelmingly common case — runs no expression at all: the
+// keyworded secret rules stay behind the AC pre-filter and the
+// keywordless PII ones behind their [rule.shape].
+//
+// caseSensitive, when true, requires the post-filter step (see
+// [compiledRule.passes]) to find at least one of [csKW] verbatim
+// in the original-case input — not the case-folded form the AC
+// already matched. This avoids running the regex on every file
+// that happens to contain a folded form of a CS keyword (e.g. the
+// English bigrams `mt`/`nd`/`od` for Discord, `sk` for Twilio).
 type compiledRule struct {
 	kwBits        kwMask
 	caseSensitive bool
